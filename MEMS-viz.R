@@ -54,25 +54,29 @@ plot_obs_vs_pred <- function(){
 #
 ########################################################
 plot_taps_rsme_mean<- function(result_file,imu_name,sel_sensors){
+  colors=rainbow(length(sel_sensors))
   g<-read.csv(file=result_file,sep=',',header=T)
   g_means<-aggregate(g[, sel_sensors], list(g$timedelay), mean)
   pdf(paste(results_dir,"figs/",imu_name,"_mean.pdf",sep=""),width=6,height=3.5)
   par(mgp=c(1.5,0.3,0.2))
   par(mar=c(5,4,2,2)+0.1)
-  plot(g_means$Group.1,g_means$X1,xaxt='n',t='b',cex=0.4,ylim=c(0.005,0.95),col='red',ylab=" AVG.RSME",xlab="Number of taps",
+  i=0
+  plot(g_means$Group.1,g_means[[sel_sensors[1]]],xaxt='n',t='b',cex=0.4,ylim=c(0,max(g_means[sel_sensors])),col=colors[i],ylab=" AVG.RSME",xlab="Number of taps",
        main=imu_name,cex.main=1.0,cex.lab=1.0, cex.axis=1.0)
-  lines(g_means$Group.1,g_means$X2,xaxt='n',t='b',cex=0.4,col='blue')
-  lines(g_means$Group.1,g_means$X6,xaxt='n',t='b',cex=0.4,col='green')
+  for (sensor in sel_sensors[1:length(sel_sensors)]){
+      i=i+1 
+       lines(g_means$Group.1,g_means[[sensor]],xaxt='n',t='b',cex=0.4,col=colors[i])
+     
+  }
   axis(1,at=selected_taps,cex.axis=1.0)
-  legend(80,0.8, c("AccX","AccY","GyroZ"), cex=0.8,pch=1, col=c("red","blue","green"), bty = "n")
+  legend(80,max(g_means[sel_sensors]), sensor_type[c(sel_sensors)], cex=0.8,pch=1, col=colors, bty = "n")
   dev.off()
 }
 
 
-plot_taps_rsme_boxplot<- function(result_file,imu_name,sel_sensors, first_tap=7){
+plot_taps_rsme_boxplot<- function(result_file,imu_name,sel_sensors, first_tap=4){
   i=1
-  sensor_type=c("AccX","AccY","GyroZ")
-  colors=c("red","blue","green")
+  colors=rainbow(length(sel_sensors))
   g<-read.csv(file=result_file,sep=',',header=T)
   taps=selected_taps[first_tap: length(selected_taps)]
   for (sensor in sel_sensors){
@@ -83,7 +87,7 @@ plot_taps_rsme_boxplot<- function(result_file,imu_name,sel_sensors, first_tap=7)
     boxplot(boxplot_data[first_tap:length(boxplot_data)],
       xaxt='n',ylab="RSME",xlab="Number of taps",
       col=colors[i],
-      main=sensor_type[i],cex.main=1.0,cex.lab=1.0, cex.axis=1.0
+      main=sensor_type[[sensor]],cex.main=1.0,cex.lab=1.0, cex.axis=1.0
     )
     axis(1,at=seq(1,length(taps)),labels=taps,cex.axis=1.0)
     i=i+1
