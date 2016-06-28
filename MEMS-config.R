@@ -20,15 +20,20 @@ imu_data[5]=paste(dataset_dir,"glad_data.txt",sep="")
 
 ## TARGET IMU Data
 imu_target=c()
-imu_target[1]=paste(dataset_dir,"glad_H764_target.txt",sep="")
-imu_target[2]=paste(dataset_dir,"xbow1_H764_target.txt",sep="")
-imu_target[3]=paste(dataset_dir,"xsns1_HT764_target.txt",sep="")
-imu_target[4]=paste(dataset_dir,"glad_HT764_target.txt",sep="") # target based on GLad Frequency
+imu_target[1]=paste(dataset_dir,"glad_H764_sgolay_target.txt",sep="")
+imu_target[2]=paste(dataset_dir,"xbow1_H764_sgolay_target.txt",sep="")
+imu_target[3]=paste(dataset_dir,"xsns1_H764_sgolay_target.txt",sep="")
+imu_target[4]=paste(dataset_dir,"glad_H764_target.txt",sep="") # target based on GLad Frequency
 imu_target[5]=paste(dataset_dir,"glad_xbow1_target.txt",sep="") # xbow based on GLAD frequency
 
 selected_imus<-c(1,2,3)
 selected_sensors<-c(1,2,3,4,5,6)
-d_divisor=2 #divisor for using the half of dataset for training and the rest for testing.
+
+d_divisor=1 #divisor for using the half of dataset for training and the rest for testing.
 selected_taps<-c(1,seq(5,100,5))
 
+#
+# DO NOT TOUCH BEYOND THIS LINE
+#
+sensor_type=list(X1="AccX",X2="AccY",X3="AccZ",X4="GyroX",X5="GyroY",X6="GyroZ")
 log.socket <- make.socket(port=4000)
