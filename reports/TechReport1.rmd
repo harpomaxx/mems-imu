@@ -1,0 +1,174 @@
+---
+title: "EAAI Journal Report 1"
+author: "Harpo"
+date: "7/3/2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## Experimental Setup
+Basic Configuration paths
+
+```{r config, echo=TRUE}
+slicing=1 # slice windows
+kfolds=10
+dataset_dir="~/Dropbox/shared/MEMS-ANN/datasets/"
+results_dir="~/Dropbox/shared/MEMS-ANN/results/"
+```
+
+All the IMUs datasets are stored in two arrays. One array for the input data and a second one for the using as target
+
+```{r config2, echo=TRUE}
+## Datasets
+imu_data=c()
+## INPUT IMU Data
+imu_data[1]=paste(dataset_dir,"glad_data.txt",sep="")
+imu_data[2]=paste(dataset_dir,"xbow1_data.txt",sep="")
+imu_data[3]=paste(dataset_dir,"xsns1_data.txt",sep="")
+imu_data[4]=paste(dataset_dir,"glad_xbow1_target.txt") # xbow based on GLAD frequency
+imu_data[5]=paste(dataset_dir,"glad_data.txt",sep="")
+imu_data[6]=paste(dataset_dir,"glad_xbow1_target.txt",sep="")
+imu_data[7]=paste(dataset_dir,"glad_data.txt",sep="")
+imu_data[8]=paste(dataset_dir,"glad_data.txt",sep="")
+
+## TARGET IMU Data
+imu_target=c()
+imu_target[1]=paste(dataset_dir,"glad_H764_sgolay_target.txt",sep="")
+imu_target[2]=paste(dataset_dir,"xbow1_H764_sgolay_target.txt",sep="")
+imu_target[3]=paste(dataset_dir,"xsns1_H764_sgolay_target.txt",sep="")
+imu_target[4]=paste(dataset_dir,"glad_H764_target.txt",sep="") # target based on GLad Frequency
+imu_target[5]=paste(dataset_dir,"glad_H764_target.txt",sep="")
+imu_target[6]=paste(dataset_dir,"glad_H764_target.txt",sep="")
+imu_target[7]=paste(dataset_dir,"glad_xbow1_target.txt",sep="") # xbow based on GLAD frequency
+imu_target[8]=paste(dataset_dir,"glad_xbow1_sgolay_target.txt",sep="") # xbow based on GLAD frequency + SGOLAY
+```
+
+
+For this particular experiment, we focus on the results of the following IMU configuration:  
+
+number | Selected IMU | Target
+-------| -------------| -----------
+1      | Glad         | H764 Sgolay  
+5      | Glad         | H764          
+6      | Xbow         | H764          
+7      | Glad         | Xbow          
+8      | Glad         | Xbow Sgolay 
+
+```{r config3, echo=TRUE}
+selected_imus<-c(1,5,6,7,8)
+```
+An for each IMU we only select  the following sensors:
+
+number | Sensor  | 
+-------| ------- | 
+1      | AccX    |   
+5      | AccY    |           
+6      | GyroZ   |           
+
+```{r config4, echo=TRUE}
+selected_sensors<-c(1,2,6)
+```
+We run a 10-folds Crossvalidation for each IMU configuration. Note that we consider only the half of the dataset. This means that only the first dynamic is considered.
+
+##Experiment Results
+
+```{r signifcance, echo=F}
+source("MEMS-significance.R",echo = F)
+selected_taps<-c(1,seq(5,100,5))
+results_glad_ht764_sgolay=select_n_taps( paste(results_dir,"data/","glad_data.txt_glad_H764_sgolay_target.txt_lm__cv_results.csv",sep=""),"Gladiator",c("X1","X2","X6"))
+results_glad_ht764=select_n_taps( paste(results_dir,"data/","glad_data.txt_glad_H764_target.txt_lm__cv_results.csv",sep=""),"Gladiator",c("X1","X2","X6"))
+results_xbow_ht764=select_n_taps( paste(results_dir,"data/","glad_xbow1_target.txt_glad_H764_target.txt_lm__cv_results.csv",sep=""),"Xbow",c("X1","X2","X6"))
+results_glad_xbow=select_n_taps( paste(results_dir,"data/","glad_data.txt_glad_xbow1_target.txt_lm__cv_results.csv",sep=""),"Xbow",c("X1","X2","X6"))
+results_glad_xbow_slogay=select_n_taps( paste(results_dir,"data/","glad_data.txt_glad_xbow1_sgolay_target.txt_lm__cv_results.csv",sep=""),"Xbow",c("X1","X2","X6"))
+
+```
+The results for the first IMU configuration are:
+
+#### Gladiator using H674 with SGOLAY as target:
+```{r gladh764, echo=F}
+results_glad_ht764_sgolay[,c(2,3,4,6)]
+``` 
+
+#### Crossbow using H674 with SGOLAY as target:
+```{r xbowh764, echo=F}
+results_xbow_ht764[,c(2,3,4,6)]
+``` 
+
+#### Gladiator using Xbow with SGOLAY as target:
+```{r gladxbowsgolay, echo=F}
+results_glad_xbow_slogay[,c(2,3,4,6)]
+``` 
+
+#### Gladiator using XBow  as target:
+```{r gladxbow, echo=F}
+results_glad_xbow[,c(2,3,4,6)]
+``` 
+
+A plot comparing the performance using the selected TAPs on the full dataset is shown 
+[here](http://rpubs.com/harpomaxx/melbourne2).
+
+##Comparison of the RSME observed by the TD-MLR compared with H784 (with and without SGOLAY)  
+
+```{r rsme-prep, echo=T, message=FALSE, warning=FALSE}
+source("MEMS-evaluation.R",echo = F)
+
+h764s_d<-as.data.frame(fread(imu_target[1],sep=" ",header=F)) #H764 with SGOLAY
+h764_d<-as.data.frame(fread(imu_target[4],sep=" ",header=F)) #H764 without SGOLAY
+
+get_prediction <- function(dataset){
+  train=dataset[1:(nrow(dataset)/2),]
+  test=dataset[(nrow(dataset)/2):nrow(dataset),]
+  lmmodel=lm(target ~ .,train)
+  return ( predict(lmmodel,test))
+}  
+get_predections_vs_h764 <- function(taps,imunun){
+i=1
+h764_rsme=c()
+for (sensor in selected_sensors){
+      dataset <-seqdata(sensor,taps[i],imunun)
+     # h764s <-seqdata(sensor,taps[i],1)$target
+     # h764 <-seqdata(sensor,taps[i],6)$target
+      glad_xbow_predictions= get_prediction(dataset)
+                          
+      h764_rsme<- rbind(h764_rsme,  cbind(
+      #        rsme(glad_xbow_predictions,h764[(length(h764)/2):length(h764)]),
+      #       rsme(glad_xbow_predictions,h764s[(length(h764s)/2):length(h764)]),
+                          # xbow RSME agaisnt H764 without SGOLAY
+rsme(glad_xbow_predictions,h764_d[ ((nrow(dataset)/2)+(taps[i]-1)):nrow(h764_d),sensor]),
+                          # xbow RSME agaisnt H764 with SGOLAY
+                          rsme(glad_xbow_predictions,h764s_d[((nrow(dataset)/2)+(taps[i]-1)):nrow(h764s_d),sensor])))
+      i=i+1
+}
+colnames(h764_rsme)<-c("rsme_h764","rmse_h764s")
+rownames(h764_rsme)<-c("AccX","AccY","GyroZ")
+return (h764_rsme)  
+} 
+```
+
+We build the TD-MLR model using  Xbow target for sensors `selected_sensors` with selected taps (according to table) and using the first part of the dataset. We repeat the same for target Xbow SGOLAY. Then we calculate the RSME against the test portion of the h784 (with and without SGOLAY).
+```{r rsme}
+
+glad_h764_vs_h764 <-get_predections_vs_h764 (unlist(results_glad_ht764_sgolay$tap),1)
+glad_xbow_vs_h764 <-get_predections_vs_h764 (unlist(results_glad_xbow$tap),7)
+glad_xbows_vs_h764 <-get_predections_vs_h764 (unlist(results_glad_xbow_slogay$tap),8)
+
+# TD-MLR h764 sgolay RSME vs h764 and h764 with SGOLAY
+glad_h764_vs_h764
+# TD-MLR xbow  RSME vs h764 and h764 with SGOLAY
+glad_xbow_vs_h764
+# TD-MLR xbow sgolay RSME vs h764 and h764 with SGOLAY
+glad_xbows_vs_h764
+
+
+
+```
+
+## Discussion
+* Gladiator TD-MLR IMUs do not show a significative difference in terms of RSME when using Xbow and Xbow Slogay. Perhaps SGOLAY filter is not strong enough?. The fact is that under the current situation the hipotesis of the article is somewhat weak. Using SLOGAY does not help in improving the performance of a low-cost gladiator.
+
+* The RSME of the Glad+Xbow compared with the H764 IMU seems to be similar to the values obtained when Glad was trained using the H764 ( *at least for AccX* ). Interestly, the RSME value decreases when is compared with the H764 filtered with SGOLAY. If we observe the plot comparing Xbow and H764 we can observe that bow signal for the ACCX are very similar, this could explains why significant difference werent observerd using one or the other IMU as target.
+
+* Finally, the optimal number of taps does not vary significatly when using different targets. Perhaps  time dependencies are actually asociated to the input signal and not related with the target. Eventualy, we can try to infer the optimal number of taps using some other strategies apart from the ANOVA on RSME.
+
