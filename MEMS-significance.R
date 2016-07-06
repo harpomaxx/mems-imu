@@ -46,7 +46,7 @@ best_tap_anova <-function (cv_grouped_dataset,sensor)
     
     if (anovaa$p.value >0.05){
       anovaainv<-oneway.test(form,data=cv_grouped_dataset[cv_grouped_dataset$timedelay<=tap,])
-      print(paste(" >",tap,"|",anovaa$p.value,"| <=",tap,"|",anovaainv$p.value))
+      ##print(paste(" >",tap,"|",anovaa$p.value,"| <=",tap,"|",anovaainv$p.value))
       break
     }
   }
@@ -54,7 +54,7 @@ best_tap_anova <-function (cv_grouped_dataset,sensor)
 }
 
 select_n_taps<- function(result_file,imu_name,sel_sensors){
-  results_l=c()
+  results_l<-c()
   g<-read.csv(file=result_file,sep=',',header=T)
   g_means<-aggregate(g[, c(sel_sensors,paste(sel_sensors,"_t_rsme",sep=""))], list(g$timedelay), mean)
   g_sd<-aggregate(g[, c(sel_sensors,paste(sel_sensors,"_t_rsme",sep=""))], list(g$timedelay), sd)
@@ -65,14 +65,8 @@ select_n_taps<- function(result_file,imu_name,sel_sensors){
     rsme_sd<-g_sd[g_sd$Group.1==best_tap,][sel_sensors[sensorid]]
     raw_rsme_mean<-g_means[g_means$Group.1==best_tap,][paste(sel_sensors[sensorid],"_t_rsme",sep="")]
     raw_rsme_sd<-g_sd[g_sd$Group.1==best_tap,][paste(sel_sensors[sensorid],"_t_rsme",sep="")]
-    
-    #print(  paste(sel_sensors[sensorid],g_means[g_means$Group.1==best_tap,][sel_sensors[sensorid]],
-    #              g_sd[g_sd$Group.1==best_tap,][sel_sensors[sensorid]]))
-    #print(paste(paste(sel_sensors[sensorid],"_t_rsme",sep=""),rsme_mean, rsme_sd))
-  measures<-c(imu_name,sel_sensors[sensorid],best_tap,rsme_mean,rsme_sd,raw_rsme_mean,raw_rsme_sd)
-  results_l=rbind(results_l,measures)
+    results_l<-rbind(results_l,c(imu_name,sel_sensors[sensorid],best_tap,rsme_mean,rsme_sd,raw_rsme_mean,raw_rsme_sd))
   }
-#  results_l=cbind(results_l,rep(imu_name,length(measures)))
-  colnames(  results_l)<-c("imu_name", "sensorID","tap","rsme_mean","rsme_sd", "raw_rsme_mean","raw_rsme_sd")
-  return(t(results_l))
+  colnames(results_l)<-c("imu_name", "sensorID","tap","rsme_mean","rsme_sd", "raw_rsme_mean","raw_rsme_sd")
+  return(as.data.frame(results_l))
   }
