@@ -7,6 +7,7 @@
 library("e1071")
 library("RSNNS")
 library("cvTools")
+library("data.table")
 
 
 ##################
@@ -25,12 +26,62 @@ rsme <- function(x,y){
   return (sqrt(mean( (x-y)^2  )))
 }
 
+fast_seqdata<-function(sn, tm,imunum, normaldata=F,shuffledata=F,datasetsize=c()){
+  imud<-fread(imu_data[imunum],sep=" ",header=F)
+  imut<-fread(imu_target[imunum],sep=" ",header=F)
+  
+  if (length(datasetsize)>0){
+    imud=imud[datasetsize[1]:datasetsize[2],]
+    imut=imut[datasetsize[1]:datasetsize[2],]
+  }
+  
+  if (normaldata == T){
+    input<-normalized(imud[,sn,with=F])
+    target<-normalized(imut[,sn,with=F])
+  }else{
+    input<-imud[,sn,with=F] # * -1 workaround for fixing xbow measures
+    target<-imut[,sn,with=F]
+  }
+  
+  sequences=matrix(data=NA,ncol=tm+1,nrow=nrow(imud))
+  counter=1
+  # building sequences
+  row=1
+  while (counter <=nrow(imud)){
+    col=c()
+    if (shuffledata == T){
+      coltmp=input[counter:(counter+tm-1)] #input
+      colidx<-sample(length(coltmp),length(coltmp))
+      col=cbind(col,t(coltmp[colidx]))
+    }else{
+      col=cbind(col,t(input[counter:(counter+tm-1)])) #input
+    }
+    
+    col=cbind(col,target[counter+tm-1]) #target
+    sequences[row,]<-col
+    row=row+1
+    counter=counter+slicing
+    #  if (counter%%((slicing*100)+1) ==0 )
+    #    print (counter)
+  }
+  # setup  dataset
+  seqdf<-na.omit(as.data.frame(sequences))
+  colnames(seqdf)[tm+1] <- "target"
+  return (seqdf)
+}
+
+
 #######################################
 ## get sequential data
 #######################################
-seqdata<-function(sn, tm,imunum, normaldata=F,shuffledata=F){
-  imud<-read.csv(imu_data[imunum],sep=" ",header=F)
-  imut<-read.csv(imu_target[imunum],sep=" ",header=F)
+seqdata<-function(sn, tm,imunum, normaldata=F,shuffledata=F,datasetsize=c()){
+  imud<-as.data.frame(fread(imu_data[imunum],sep=" ",header=F))
+  imut<-as.data.frame(fread(imu_target[imunum],sep=" ",header=F))
+  
+  if (length(datasetsize)>0){
+    imud=imud[datasetsize[1]:datasetsize[2],]
+    imut=imut[datasetsize[1]:datasetsize[2],]
+  }
   
   if (normaldata == T){
     input<-normalized(imud[,sn])
@@ -74,14 +125,40 @@ normalized <-function(x){
   return ((x-mean(x))/(max(x)-min(x)))
 }
 
+#########################################
+# Train and test (2-fold validation)
+##########################################
+
+exptraintest <- function(imunum,taps_by_sensors=list(),model='lm', model_arguments=c(),normaldata=F,shuffledata=F){
+  results=c()
+  sensors=c()
+  names(taps_by_sensors)<-selected_sensors 
+  for (sensornumber in selected_sensors){
+    timedelay=taps_by_sensors[[as.character(sensornumber)]]
+    print(paste("sensor",sensornumber))
+    print ("Sequencing data..")
+    sequencesdf<- seqdata(sensornumber,timedelay,imunum,normaldata,shuffledata)
+    print (paste("Done",nrow(sequencesdf),"sequences"))
+    print("TrainTest")
+    tt=crossvalidation(sequencesdf,2,timedelay,model,model_arguments,cv_type="consecutive")
+    sensors<-cbind(sensors,rep(timedelay,2))
+    sensors<-cbind(sensors,tt)
+  }
+  results=rbind(results,sensors)
+  colnames(results)[1:(length(selected_sensors)*3)]<-rbind("timedelay",selected_sensors,paste(selected_sensors,"t_rsme",sep="_"))
+  # some R magic for setting the name of the file based on model's arguments
+  arguments_str<- paste(names(model_arguments),as.vector(unlist(model_arguments)),sep="_",collapse="_")
+  write.csv(results, file = paste(paste(results_dir,basename(imu_data[imunum]),sep=""),model,arguments_str,"test_results.csv",sep='_') ,quote=F, row.names = T,sep=',')
+
+}
+
 ##########################################
 # Cross Validation
 ##########################################
-crossvalidation <- function(dataset,kfolds,timedelay,model=lm, model_arguments=c()){
+crossvalidation <- function(dataset,kfolds,timedelay,model='lm', model_arguments=c(),cv_type="random"){
   Log("Crossvalidation started")
-  folds <- cvFolds(nrow(dataset), K = kfolds, R = 1,type="random")
+  folds <- cvFolds(nrow(dataset), K = kfolds, R = 1,type=cv_type)
   indexes=folds$which
-  gc()
   results<-foreach(k=1:kfolds, .combine='rbind', .multicombine=FALSE ) %dopar% {
     Log(paste("worker",k,": Started"))  
     time.start <- Sys.time()
@@ -117,9 +194,9 @@ crossvalidation <- function(dataset,kfolds,timedelay,model=lm, model_arguments=c
 }
 
 #################################################
-# Cross Validation Experiments
+# Cross Validation Experiments using half of a dataset
 #################################################
-expcv <- function(model='lm',arguments=c(),normaldata=T,shuffledata=F){
+expcv <- function(model='lm',arguments=c(),normaldata=F,shuffledata=F){
   Log("Experiments started")
   for (imunum in selected_imus){
     results=c()
@@ -132,11 +209,12 @@ expcv <- function(model='lm',arguments=c(),normaldata=T,shuffledata=F){
       for (sensornumber in selected_sensors){
         print(paste("sensor",sensornumber))
         print ("Sequencing data..")
-        sequencesdf<- seqdata(sensornumber,timedelay,imunum,normaldata,shuffledata)
+        datasetsize<-nrow(fread(imu_data[imunum],sep=" ",header=F)) #FIXME Really ugly hack
+        sequencesdf<- seqdata(sensornumber,timedelay,imunum,normaldata,shuffledata,c(1,datasetsize/2))
         print (paste("Done",nrow(sequencesdf),"sequences"))
         print("Crossvalidation")
         time.start <- Sys.time()
-        cv<-crossvalidation(sequencesdf[1:(nrow(sequencesdf)/d_divisor),],kfolds,timedelay,model,arguments)
+        cv<-crossvalidation(sequencesdf,kfolds,timedelay,model,arguments)
         arguments_str<- paste(names(arguments),as.vector(unlist(arguments)),sep="_",collapse="_")
         # write.csv(cv, file = paste(imu_data[imunum],model,arguments_str,sensornumber,timedelay,"cv_results.csv",sep='_') ,quote=F, row.names = T,sep=',')
         time.stop <- Sys.time()
@@ -151,14 +229,16 @@ expcv <- function(model='lm',arguments=c(),normaldata=T,shuffledata=F){
     colnames(results)[1:(length(selected_sensors)*2)+1]<-rbind(selected_sensors,paste(selected_sensors,"t_rsme",sep="_"))
     # some R magic for setting the name of the file based on model's arguments
     arguments_str<- paste(names(arguments),as.vector(unlist(arguments)),sep="_",collapse="_")
-    write.csv(results, file = paste(paste(results_dir,basename(imu_data[imunum]),sep=""),model,arguments_str,"cv_results.csv",sep='_') ,quote=F, row.names = T,sep=',')
+    write.csv(results, file = paste(
+                                    paste(results_dir,basename(imu_data[imunum]),"_",basename(imu_target[imunum]),sep="")
+                                    ,model,arguments_str,"cv_results.csv",sep='_') ,quote=F, row.names = T,sep=',')
   }
   
 }
 ####################################################
 # Function for generating Prediction vs Observed data using just 1 fold out a k-fold CV
 ####################################################
-pred_vs_obs <- function (sensornumber,timedelay,imunum,normaldata=T){
+pred_vs_obs <- function (sensornumber,timedelay,imunum,normaldata=F){
   set.seed(123) #all the imu dataset use the same data points
   print ("Sequencing data..")
   dataset<- seqdata(sensornumber,timedelay,imunum,normaldata)
@@ -183,7 +263,7 @@ pred_vs_obs <- function (sensornumber,timedelay,imunum,normaldata=T){
 ############################################
 # SVM parameters Sweeping
 ############################################
-svm_sweep<-function(normaldata=T){
+svm_sweep<-function(normaldata=F){
   #nus = c(0.1,0.2,0.5)
   #gammas= c(0.01,0.05,0.1,0.2,0.5,1,2,4,8,16,32)
   nus = c(0.1)
@@ -196,7 +276,7 @@ svm_sweep<-function(normaldata=T){
   } 
 }
 
-ann_sweep<-function(normaldata=T){
+ann_sweep<-function(normaldata=F){
   hidneurons=c(60)
   #,80,100)
   iter=200
