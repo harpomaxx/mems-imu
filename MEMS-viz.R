@@ -1,6 +1,6 @@
 #MEMS Visualization script
 # Harpo MAxx (2015-2016)
-
+library(caret)
 #######################################################
 # Plot Observed vs predicted 
 #######################################################
@@ -94,4 +94,89 @@ plot_taps_rsme_boxplot<- function(result_file,imu_name,sel_sensors, first_tap=4)
     dev.off()
   }
 }
+
+#
+# Plot the weight lag distribution of a given lm model
+#
+plotweights <-function(lm_model,imu_name,sensor){
+  pdf(paste(results_dir,"figs/weights_",imu_name,"_",sensor,".pdf",sep=""),width=8,height=5.5)
+  weights=rev(lm_model$coefficients[2:length(lm_model$coefficients)])  
   
+  wbplot=barplot(weights,las=2,names=sprintf("t-%s",seq(1,length(weights))),
+                 col=rgb(1,0,0,1/4),
+                 border='skyblue',space=0.1,  cex.lab=0.6,
+                 cex.axis = 0.6, xaxt='n',ylim=c(0,max(weights)+0.01))#,ylim=c(min(weights),max(weights)))
+  
+  text(wbplot,0.0055, labels=sprintf("t-%s",seq(1,length(weights))), col="black",cex=0.5,srt=90)
+  
+  fitted=loess.smooth(x=seq(1,length(weights)),y=weights,evaluation = length(weights))$y
+  lines(wbplot,fitted+0.015,col=rgb(0,0,1,1/4))
+  points(wbplot,fitted+0.015,col=rgb(0,0,1,1/4),cex=0.5,pch=20)
+  dev.off()
+}     
+
+#
+# Comparison of 3 time series using boxplots
+# TODO: need parametrization
+boxplot_time_series<-function()
+{
+  glad=as.data.frame(fread(imu_data[1],sep=" ",header=F))
+  xbow=as.data.frame(fread(imu_data[4],sep=" ",header=F))
+  h764=as.data.frame(fread(imu_target[6],sep=" ",header=F))
+  glad_sensors=cbind(glad[,c(1,2,6)],rep("Gladiator"),deparse.level=0)
+  names(glad_sensors)=c("AccX","AccY","GyroZ","IMU")
+  xbow_sensors=cbind(xbow[,c(1,2,6)],rep("Crossbow"))
+  names(xbow_sensors)=c("AccX","AccY","GyroZ","IMU")
+  h764_sensors=cbind(h764[,c(1,2,6)],rep("Honeywell"))
+  names(h764_sensors)=c("AccX","AccY","GyroZ","IMU")
+  
+  dynamic1=rbind(glad_sensors[1:(nrow(glad_sensors)/2),],
+                 xbow_sensors[1:(nrow(xbow_sensors)/2),],
+                 h764_sensors[1:(nrow(h764_sensors)/2),])
+  
+  dynamic2=rbind(glad_sensors[(nrow(glad_sensors)/2):nrow(glad_sensors),],
+                 xbow_sensors[(nrow(xbow_sensors)/2):nrow(xbow_sensors),],
+                 h764_sensors[(nrow(h764_sensors)/2):nrow(h764_sensors),])
+  pdf(paste(results_dir,"figs/boxplot_ts_1_.pdf",sep=""),width=10,height=4.5)
+  featurePlot(x = dynamic1[, 1:3], 
+              y = dynamic1$IMU, 
+              plot = "box", 
+              ## Pass in options to bwplot() 
+              scales = list(y = list(relation="free",cex=1.2),
+                            x = list(rot = 90,cex=1.2)),
+              ylim=list(c(-4, 4), c(-5, 5),c(-0.6,0.5)),
+              layout = c(3,1 ), 
+              auto.key = list(columns = 2),
+              do.out = F,main="Trayectory 1 (T1)")
+  dev.off()
+  pdf(paste(results_dir,"figs/boxplot_ts_2_.pdf",sep=""),width=10,height=4.5)
+  
+  featurePlot(x = dynamic2[, 1:3], 
+              y = dynamic2$IMU, 
+              plot = "box", 
+              ## Pass in options to bwplot() 
+              scales = list(y = list(relation="free",cex=1.2),
+                            x = list(rot = 90,cex=1.2)),  
+              ylim=list(c(-4, 4), c(-5, 5),c(-0.6,0.5)),
+              layout = c(3,1 ), 
+              auto.key = list(columns = 2),
+              do.out = F,main="Trayectory 2 (T2)")
+  dev.off()
+  
+  
+#  boxp=boxplot(dataset[,c(1,7,13,2,8,14,6,12,18)],
+#        at=c(1,1.9,2.8,  4.0,4.9,5.8, 7.0,7.9,8.9),xaxt='n',varwidth = T,col=c("pink","skyblue","orange"),outline = F,ylab='Sensor Value')
+#  #plot(boxp)
+#  text( 
+#    c(1:9)-0.1 , 
+#    boxp$stats[nrow(boxp$stats) , ]+0.2 , 
+#    rep(c("glad","xbow","h764"),3),cex=0.7  
+#  )
+#  abline(v = 3.4, col = "black")
+#  abline(v = 6.4, col = "black")
+#  axis(side=1, at=c(2,5,8), 
+#       labels=c('AccX',
+#                'AccY',
+#                'GyroZ'), line=0.5, lwd=0)
+  
+}  
