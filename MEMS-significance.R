@@ -41,17 +41,64 @@ for (groupid in seq(1,length(grouped_dataset))){
 best_tap_anova <-function (cv_grouped_dataset,sensor)
 {
   for (tap in  selected_taps){
+    print(tap)
     form<-formula(paste(sensor,'~ timedelay',sep=""))
     anovaa<-oneway.test(form,data=cv_grouped_dataset[cv_grouped_dataset$timedelay>tap,])
     
     if (anovaa$p.value >0.05){
       anovaainv<-oneway.test(form,data=cv_grouped_dataset[cv_grouped_dataset$timedelay<=tap,])
-      ##print(paste(" >",tap,"|",anovaa$p.value,"| <=",tap,"|",anovaainv$p.value))
+      print(paste(" >",tap,"|",round(anovaa$p.value,4),"| <=",tap,"|",anovaainv$p.value))
       break
     }
   }
   return (tap)
 }
+
+best_tap_anova_ordered <-function (cv_grouped_dataset,sensor)
+{
+  library(dplyr)
+  require("lazyeval")
+  library(gsubfn)
+  # calculating mean by timedelay
+  taps_order= as.data.frame(cv_grouped_dataset %>% group_by(timedelay) %>% summarise_(
+    .dots = fn$list(mean = "mean($sensor)")))
+  # decreasing order
+  taps_order=taps_order[order(taps_order$mean,decreasing = T ),]$timedelay
+  print(taps_order)
+  for (tapn in  seq(1,length(taps_order))) {
+    cv_subset=cv_grouped_dataset[,c(sensor,"timedelay")] %>% filter(timedelay %in%  taps_order[tapn:length(taps_order)])
+    cv_subset_opposite=cv_grouped_dataset[,c(sensor,"timedelay")] %>% filter(timedelay %in% taps_order[1:tapn])
+    
+    # checking for a minimal tap number
+    if (nrow(cv_subset)>10){
+      form<-formula(paste(sensor,'~ timedelay',sep=""))
+      anovaa<-oneway.test(form,data=cv_subset)
+      
+      # There is no significant difference between the groups
+      if (anovaa$p.value >0.05){
+        anovaainv<-oneway.test(form,data=cv_subset_opposite)
+        print(paste(" >=",taps_order[tapn],"|",round(anovaa$p.value,4),"| <",taps_order[tapn],"|",anovaainv$p.value))
+        taps_order_subset=taps_order[tapn:length(taps_order)]
+        
+        #if (taps_order[tapn] > taps_order_subset[order(taps_order_subset,decreasing = F)][1] ){
+            print(  taps_order_subset[order(taps_order_subset,decreasing = T)] )
+            best_tap = as.data.frame(cv_subset %>% group_by(timedelay) %>% summarise_(
+          .dots = fn$list(mean = "mean($sensor)")))
+            best_tap = best_tap[which.min(best_tap$timedelay),]$timedelay
+            break
+        #}else{
+        #  best_tap=taps_order[tapn]
+         # break
+        #}
+      }
+    }else{
+      best_tap=taps_order[tapn]
+      break
+    }
+  }
+  return (best_tap)
+}
+
 
 select_n_taps<- function(result_file,imu_name,sel_sensors){
   results_l<-c()
@@ -60,7 +107,7 @@ select_n_taps<- function(result_file,imu_name,sel_sensors){
   g_sd<-aggregate(g[, c(sel_sensors,paste(sel_sensors,"_t_rsme",sep=""))], list(g$timedelay), sd)
   
   for (sensorid in seq(1,length(sel_sensors))){
-    best_tap<-best_tap_anova(g,sel_sensors[sensorid])
+    best_tap<-best_tap_anova_ordered(g,sel_sensors[sensorid])
     rsme_mean<-g_means[g_means$Group.1==best_tap,][sel_sensors[sensorid]]
     rsme_sd<-g_sd[g_sd$Group.1==best_tap,][sel_sensors[sensorid]]
     raw_rsme_mean<-g_means[g_means$Group.1==best_tap,][paste(sel_sensors[sensorid],"_t_rsme",sep="")]
