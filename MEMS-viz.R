@@ -54,42 +54,44 @@ plot_obs_vs_pred <- function(){
 #
 ########################################################
 plot_taps_rsme_mean<- function(result_file,imu_name,sel_sensors){
-  colors=rainbow(length(sel_sensors))
+  colors=cm.colors(length(sel_sensors))
+  colors=c("skyblue","orange","brown")
   g<-read.csv(file=result_file,sep=',',header=T)
   g_means<-aggregate(g[, sel_sensors], list(g$timedelay), mean)
-  pdf(paste(results_dir,"figs/",imu_name,"_mean.pdf",sep=""),width=6,height=3.5)
+  pdf(paste(results_dir,"figs/",imu_name,"_mean.pdf",sep=""),width=8,height=4)
   par(mgp=c(1.5,0.3,0.2))
   par(mar=c(5,4,2,2)+0.1)
   i=0
-  plot(g_means$Group.1,g_means[[sel_sensors[1]]],xaxt='n',t='b',cex=0.4,ylim=c(0,max(g_means[sel_sensors])),col=colors[i],ylab=" AVG.RSME",xlab="Number of taps",
-       main=imu_name,cex.main=1.0,cex.lab=1.0, cex.axis=1.0)
+  plot(g_means$Group.1,g_means[[sel_sensors[1]]],xaxt='n',t='b',cex=0.7,ylim=c(0,max(g_means[sel_sensors])),col=colors[i],ylab=" AVG. RSME",xlab="Lag Length",
+       main=imu_name,cex.main=1.3,cex.lab=1.3, cex.axis=1.2,pch=15,lty=1)
   for (sensor in sel_sensors[1:length(sel_sensors)]){
       i=i+1 
-       lines(g_means$Group.1,g_means[[sensor]],xaxt='n',t='b',cex=0.4,col=colors[i])
+       lines(g_means$Group.1,g_means[[sensor]],xaxt='n',t='b',cex=0.7,col=colors[i],pch=15,lty=1)
      
   }
-  axis(1,at=selected_taps,cex.axis=1.0)
-  legend(80,max(g_means[sel_sensors]), sensor_type[c(sel_sensors)], cex=0.8,pch=1, col=colors, bty = "n")
+  axis(1,at=selected_taps,cex.axis=1.2)
+  legend(80,max(g_means[sel_sensors]), sensor_type[c(sel_sensors)], cex=1.2,pch=15, col=colors, bty = "n")
   dev.off()
 }
 
 
-plot_taps_rsme_boxplot<- function(result_file,imu_name,sel_sensors, first_tap=4){
+plot_taps_rsme_boxplot<- function(result_file,imu_name,sel_sensors, first_tap=7){
   i=1
-  colors=rainbow(length(sel_sensors))
+  colors=cm.colors(length(sel_sensors))
+  colors=c("skyblue","orange","brown")
   g<-read.csv(file=result_file,sep=',',header=T)
   taps=selected_taps[first_tap: length(selected_taps)]
   for (sensor in sel_sensors){
-    pdf(paste(results_dir,"figs/",imu_name,"_",sensor,".pdf",sep=""),width=6,height=3.5)
+    pdf(paste(results_dir,"figs/",imu_name,"_",sensor,".pdf",sep=""),width=5,height=4)
     par(mgp=c(1.5,0.3,0.2))
     par(mar=c(5,4,2,2)+0.)
     boxplot_data=unstack(g, formula(paste(sensor,"~timedelay",sep="") ))
     boxplot(boxplot_data[first_tap:length(boxplot_data)],
-      xaxt='n',ylab="RSME",xlab="Number of taps",
+      xaxt='n',ylab="RSME",xlab="Lag Length",
       col=colors[i],
-      main=sensor_type[[sensor]],cex.main=1.0,cex.lab=1.0, cex.axis=1.0
+      main=sensor_type[[sensor]],cex.main=1.3,cex.lab=1.3, cex.axis=1.2
     )
-    axis(1,at=seq(1,length(taps)),labels=taps,cex.axis=1.0)
+    axis(1,at=seq(1,length(taps)),labels=taps,cex.axis=1.1)
     i=i+1
     dev.off()
   }
@@ -118,6 +120,7 @@ plotweights <-function(lm_model,imu_name,sensor){
 #
 # Comparison of 3 time series using boxplots
 # TODO: need parametrization
+# BUG: Does not work as a function
 boxplot_time_series<-function()
 {
   glad=as.data.frame(fread(imu_data[1],sep=" ",header=F))
@@ -179,4 +182,16 @@ boxplot_time_series<-function()
 #                'AccY',
 #                'GyroZ'), line=0.5, lwd=0)
   
-}  
+}
+# Melbourne Dataset trajectory plot
+# Two different strecthes are considered
+
+trajectory_plot <-function(){
+  trajectory1=read.csv("/home/harpo/Dropbox/shared/MEMS-ANN/datasets/dgps_T1.txt",header=F)
+  trajectory2=read.csv("/home/harpo/Dropbox/shared/MEMS-ANN/datasets/dgps_T2.txt",header=F)
+  pdf(paste(results_dir,"figs/trajectories.pdf",sep=""),width=10,height=5)
+  par(mfrow=c(1,2))
+  plot(trajectory1$V1,trajectory1$V2,type="l",lwd=4,ylab="Latitude [degree]",xlab="Longitude [degree]",main="Stretch 1 (T1)",col="orange",cex=1.2)
+  plot(trajectory2$V1,trajectory2$V2,type="l",lwd=4,ylab="Latitude [degree]",xlab="Longitude [degree]",main="Stretch 2 (T2)",col="orange",cex=1.2)
+dev.off()
+}
