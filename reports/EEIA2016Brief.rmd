@@ -1,0 +1,818 @@
+---
+title: "EEIA 2016-brief"
+author: "Harpo"
+date: "11/17/2016"
+output: 
+  html_document: 
+    code_folding: hide
+    fig_height: 4
+    fig_width: 8
+    highlight: espresso
+    number_sections: yes
+    theme: united
+    toc: yes
+---
+<style type="text/css">
+
+.table {
+  display: block;
+  font-family: sans-serif;
+  -webkit-font-smoothing: antialiased;
+  font-size: 115%;
+  overflow: auto;
+  width: auto;
+}
+  th {
+    background-color: rgb(238, 238, 238);
+    color: black;
+    font-weight: normal;
+    padding: 20px 30px;
+    text-align: center;
+  }
+  td {
+    color: black;
+    padding: 20px 30px;
+  }
+</style>
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+source("../MEMS-config.R")
+source("../MEMS-evaluation.R")
+source("../MEMS-significance.R")
+source("../MEMS-viz.R")
+suppressPackageStartupMessages(library(lattice))
+suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages(library(knitr))
+``` 
+
+
+
+```{r, echo=FALSE}
+##Setting up Auxiliar Functions
+
+imu_mapnames=c()
+imu_mapnames[5]="glad_data"
+imu_mapnames[6]="glad_xbow1_target"
+imu_mapnames[8]="glad_xsns1_target"
+imu_mapnames[9]="glad_xtal_target"
+
+create_datafile<-function(filepath,pattern,name){
+  results=c()
+  lm_files=list.files(filepath,pattern)
+  for (file_id in 1:length(lm_files)){
+    results_file=read.csv(paste(filepath,lm_files[file_id],sep=""),header=T)
+    results_file=cbind(
+      rep(unlist(strsplit(lm_files[file_id],".txt"))[1],nrow(results_file)),
+      rep(name,nrow(results_file)),
+      results_file)
+    names(results_file)[1]="imu"
+    names(results_file)[2]="model"
+    results=rbind(results,cbind(results_file)
+    )
+  }
+  return(results)
+}
+
+```
+
+#Motivation
+Several approaches based on machine learning techniques have been proposed to increase MEMS inertial sensors' performances. Generally, such approaches  have assumed that errors cannot be explained by linear models, as well as the observed error probability distribution is not pure Gaussian. However, according to  manufacturers the error non-linearity observed in MEMS sensors can be considered in most cases negligible. Therefore, it seems necessary to evaluate linear models in the context of MEMS inertial sensor errors. In particular the application of Time delayed Multiple Linear Regression models. (TD-MLR)
+
+#Main Hypotesis
+Simpler Machine learning linear models are capable of  compensating  errors observed in MEMS sensors.
+
+# Models considered
+
+Three models are considered:
+
+1. **Time Delayed - Multi Linear Regression (TD-MLR)** : A simple linear model
+2. **Multi Layer Perceptron** (MLP), a non linear model
+3. **Moving Average** (MA): the common strategy used in navigation systems for dealing with noise
+
+A brief description of each one of the models is presented in the following subsections.
+
+## Multi Linear Regression Mode (MLR). 
+
+A TD-MLR model for representing the relationship between an explanatory variable $x$ and a response variable $y$ can be written as, 
+
+$$y_t = \alpha  + \beta_t L^q( x_{t})  + \epsilon_{t}$$
+
+
+\noindent where, the subscript $t$ refers to the $t^{th}$ time unit in the population of size $M  \in \mathbb{N}$. $y_t$ denotes the observed response for experimental time unit $t$. $\epsilon_t$ and $\alpha$ are  respectively the residual error and the intercept terms for the same time unit $t$. The expression $L^q( x_{t})$ represents a  tapped delay line for  the $x_t$ variable. A tapped delay line is a well-known method to model non-stationary time series \cite{Haykin1998} implemented as a short-term memory with $q$ unit delay operators
+
+## Multi Layer Perceptron (MLP)
+
+(From Wikipedia)
+A multilateral perceptron (MLP) is a feed forward artificial neural network model that maps sets of input data onto a set of appropriate outputs. An MLP consists of multiple layers of nodes in a directed graph, with each layer fully connected to the next one. Except for the input nodes, each node is a neuron (or processing element) with a nonlinear activation function. MLP utilizes a supervised learning technique called back-propagation for training the network.[1][2] MLP is a modification of the standard linear perceptron and can distinguish data that are not linearly separable.
+
+## Moving Average (MA)
+
+The usual technique for dealing with correlated noise consists of applying a Moving Average (MA) filter. The MA filter operates by averaging a predefined number of points from the input signal to produce each point in the output signal. As its name implies, a MA is an average that moves along the input signal values. An old value is dropped as a new value comes available. The number of values to keep will depend of the size of the time window considered. More formally, given an input signal $x$  of size $M$ defined as ${x_t}_{(t=1)}^{M}$, a MA with a time window of size $q$ will output a new signal  ${y_t}_{(t=1)}^{M-q}$ defined from the $x_i$ by taking the arithmetic mean of sub-sequences of $q$ terms,
+
+$$y_t = \frac{1}{q} \sum_{s=0}^{M-q+1} x_{t-s}$$
+
+#Experiments
+
+## Dataset Description
+
+The performance of TD-MLR models is evaluated on the well-known Melbourne dataset \cite{Toth2011}, which was kindly provided by research members from The Ohio State University (OSU) and the University of Melbourne. Since its publication in 2011, the Melbourne dataset has become a reference in the research field of MEMS inertial sensors.
+
+The  dataset contains measures provided by a mobile platform that includes various grades of IMUs, several GPS receivers and data-logging software. The IMUs included in the mobile platform varies from low-quality MEMS sensors to high-quality, navigation-grade sensors. The information provided by IMUs were logged during a predefined trajectory performed by a ground vehicle. As shown in  Fig. \ref{fig:trajectory},  the trajectory has two well-defined stretches. 
+
+```{r}
+  trajectory1=read.csv("/home/harpo/Dropbox/shared/MEMS-ANN/datasets/dgps_T1.txt",header=F)
+  trajectory2=read.csv("/home/harpo/Dropbox/shared/MEMS-ANN/datasets/dgps_T2.txt",header=F)
+  par(mfrow=c(1,2))
+  plot(trajectory1$V1,trajectory1$V2,type="l",lwd=4,ylab="Latitude [degree]",xlab="Longitude [degree]",main="Stretch 1 (T1)",col="orange",cex=1.2)
+  plot(trajectory2$V1,trajectory2$V2,type="l",lwd=4,ylab="Latitude [degree]",xlab="Longitude [degree]",main="Stretch 2 (T2)",col="orange",cex=1.2)
+```
+
+In the first stretch (T1, for short) the vehicle performs several 8-pattern loops at various velocities and accelerations in a parking area at OSU for about 16 minutes. Then, in the second stretch (T2) the vehicle is driven on an internal OSU road for an 8 minutes trip. Notice that T1 has more rich dynamics than T2. The complete dataset covers about 24 minutes.
+
+
+In the present work,  four MEMS IMUs are considered: 
+
+1. Gladiator Landmark 10 (Gladiator).  
+2. Xbow IMU400CD (Crossbow) 
+3. Xsens (xsns1)
+4. Xtal (xtal)
+
+These four IMUs represent MEMS inertial sensors of different grades, Gladiator is a low quality IMU very sensible to noise, while the remaining are mid-range quality IMUS with variable sensor characteristics .
+A fifth   Non-MEMS IMU is also considered as reference. Namely, the Honeywell H764G-1 (Honeywell), a well-established navigation-grade IMU in use on most military aircraft 
+
+## Finding the optimal models
+
+TD-MLR and MLP models are built for each one of the available sensors (i.e AccX, AccY, GyroZ). The models are built using the response observations (i.e. $y_t$) from **nav-grade Honeywell  IMU**  while the explanatory variables (i.e. $X_t$) will consist of  time delayed values coming from the corresponding low and mid quality  IMUs sensors (i.e Gladiator, Xbow, Xtal and Xsens). 
+
+```{r, message=FALSE, warning=FALSE, include=FALSE}
+results=c()
+results=rbind(results,create_datafile(paste(results_dir,"/data/",sep=""),"*mlp_.*node_5.*","mlp5"))
+results=rbind(results,create_datafile(paste(results_dir,"/data/",sep=""),"*mlp_.*node_10.*","mlp10"))
+results=rbind(results,create_datafile(paste(results_dir,"/data/",sep=""),"*mlp_.*node_20.*","mlp20"))   
+results=rbind(results,create_datafile(paste(results_dir,"/data/",sep=""),"*mlp_.*node_30.*","mlp30"))   
+results=rbind(results,create_datafile(paste(results_dir,"/data/",sep=""),"*mlp_.*node_40.*","mlp40"))   
+results=rbind(results,create_datafile(paste(results_dir,"/data/",sep=""),"*mlp_.*node_60.*","mlp60"))   
+results=rbind(results,create_datafile(paste(results_dir,"/data/",sep=""),"*mlp_.*node_80.*","mlp80"))  
+results=rbind(results,create_datafile(paste(results_dir,"/data/",sep=""),"*mlp_.*node_100.*","mlp100"))  
+results=rbind(results,create_datafile(paste(results_dir,"/data/",sep=""),"*lm_.*","mlr"))   
+results=rbind(results,create_datafile(paste(results_dir,"/data/",sep=""),"*ma_.*","ma"))   
+results=results %>%  mutate(imuid= match(imu,imu_mapnames ))
+```
+
+
+Either for TD-MLR and for MA models, the optimal size of $q$ should be determined. The strategy followed in this work consists of starting with a very short $q$ value and incrementing it by one period. For each new $q$ value the Root Square Mean Error (RMSE) of the resulting  model is calculated. For improving RSME estimate, a k-fold cross validation \cite{Mitchell1997} with $k=10$ is used to evaluate the models for every new lag term.  The process is repeated until $q$ reaches a predefined and  sufficiently large  value. Then, the optimal value for $q$ is determined by the model with the lower RSME.
+
+In the case of MLP, not only $q$ but also the different number of hidden neurons $h$ are evaluated. In this case, a similar approach is followed for a subset of the of possible network typologies (i.e. $h$), again a k-fold cross validation with $k=10$ is used to evaluate the performance of every $q$ for each one of the selected $h$. Similarly to previous models, the model with the lower RMSE is used for determining the optimal values of $q$ and $h$  
+
+Following standard machine learning methodology, the  models will be adjusted and evaluated using data from Stretch T1. Then, after the optimal lag length ($q$) for each model had been selected, an independent evaluation on stretch T2 is  conducted in order to get a better estimation of the error on unseen data.
+
+### Results for the X1 (AccX) sensor  
+
+The following box plot shows the distribution for the selected models according to the strategy described in the previous section. The plot shows the RSME distributions for sensor X1 provided by  TD-MLR, MA and MLP considering different values for $h$ (i.e. topologies)
+
+```{r, fig.height=10, fig.width=10}
+# Select the models with the smallest RMSE
+best_models=group_by(results,model,imu,timedelay) %>% summarise(mean=mean(X1),sd=sd(X1)) %>% filter(mean==min(mean)) %>% arrange(desc(imu))
+# adding the desaggregated lag info
+bw_data=inner_join(best_models,results, by=c("timedelay","imu","model"))
+bwplot(X1~model|imu,groups=timedelay,data=bw_data,scale='free'
+       ,auto.key = F
+       ,panel = panel.superpose
+       ,panel.groups=function(x,y,group.number,...){
+         xt <- x[x==min(x)] # find latest year
+         yt <- y[y==min(y)] # find value at latest year 
+         panel.text(x,yt,labels=levels(factor(bw_data$timedelay))[group.number],pos=1,...)
+         panel.bwplot(x,y,...)
+             },ylab="X1"
+         )
+```
+
+
+```{r, message=FALSE, warning=FALSE, include=FALSE}
+
+glad_mlp_model=c()
+xbow_mlp_model=c()
+xsens_mlp_model=c()
+xtal_mlp_model=c()
+X1_best_models=group_by(results,model,imuid,timedelay) %>% summarise(mean=mean(X1),sd=sd(X1)) %>% filter(mean==min(mean)) %>% arrange(desc(imuid))
+glad_mlp_model=cbind(X1=(X1_best_models %>% filter(grepl(model,pattern='mlp') & imuid==5) %>%  filter(mean==min(mean))  %>% arrange(mean) %>% select(model,timedelay))[1,2:3] )
+xbow_mlp_model=cbind(X1=(X1_best_models %>% filter(grepl(model,pattern='mlp') & imuid==6) %>%  filter(mean==min(mean))  %>% arrange(mean) %>% select(model,timedelay))[1,2:3] )
+xsens_mlp_model=cbind(X1=(X1_best_models %>% filter(grepl(model,pattern='mlp') & imuid==8) %>%  filter(mean==min(mean))  %>% arrange(mean) %>% select(model,timedelay))[1,2:3])
+xtal_mlp_model=cbind(X1=(X1_best_models %>% filter(grepl(model,pattern='mlp') & imuid==9) %>%  filter(mean==min(mean))  %>% arrange(mean) %>% select(model,timedelay))[1,2:3])
+```
+
+The plot shows also the value of $q$ for all the models. In the case of the models based on MLP, only the one with the lower RMSE are considered during the testing stage. In this case the those models are:
+
+`r glad_mlp_model$X1.model` for Gladiator with  $q$ equals to `r  glad_mlp_model$X1.timedelay`
+
+`r xbow_mlp_model$X1.model` for Crossbow with  $q$ equals to `r  xbow_mlp_model$X1.timedelay`
+
+`r xsens_mlp_model$X1.model` for Xsens with  $q$ equals to `r  xsens_mlp_model$X1.timedelay`
+
+`r xtal_mlp_model$X1.model` for Xtal with  $q$ equals to `r  xtal_mlp_model$X1.timedelay`
+
+### Results for the X2 (AccY) sensor  
+
+The following box plot shows the distribution for the selected models according to the strategy described in the previous section. The plot shows the RSME distributions for sensor X2 provided by  TD-MLR, MA and MLP considering different values for $h$ (i.e typologies)
+
+```{r, fig.height=10, fig.width=10}
+# Select the models with the smallest RMSE
+best_models=group_by(results,model,imu,timedelay) %>% summarise(mean=mean(X2),sd=sd(X2)) %>% filter(mean==min(mean)) %>% arrange(desc(imu))
+# adding the desaggregated lag info
+bw_data=inner_join(best_models,results, by=c("timedelay","imu","model"))
+bwplot(X2~model|imu,groups=timedelay,data=bw_data,scale='free'
+       ,auto.key = F
+       ,panel = panel.superpose
+       ,panel.groups=function(x,y,group.number,...){
+         xt <- x[x==min(x)] # find latest year
+         yt <- y[y==min(y)] # find value at latest year 
+         panel.text(x,yt,labels=levels(factor(bw_data$timedelay))[group.number],pos=1,...)
+         panel.bwplot(x,y,...)
+             },ylab="X2"
+         )
+```
+
+
+```{r, message=FALSE, warning=FALSE, include=FALSE}
+X2_best_models=group_by(results,model,imuid,timedelay) %>% summarise(mean=mean(X2),sd=sd(X2)) %>% filter(mean==min(mean)) %>% arrange(desc(imuid))
+glad_mlp_model=cbind(glad_mlp_model,X2=(X2_best_models %>% filter(grepl(model,pattern='mlp') & imuid==5) %>%  filter(mean==min(mean)) %>% arrange(mean) %>% select(model,timedelay))[1,2:3] )
+xbow_mlp_model=cbind(xbow_mlp_model,X2=(X2_best_models %>% filter(grepl(model,pattern='mlp') & imuid==6) %>%  filter(mean==min(mean))  %>% arrange(mean) %>% select(model,timedelay))[1,2:3] )
+xsens_mlp_model=cbind(xsens_mlp_model,X2=(X2_best_models %>% filter(grepl(model,pattern='mlp') & imuid==8) %>%  filter(mean==min(mean))  %>% arrange(mean) %>% select(model,timedelay))[1,2:3])
+xtal_mlp_model=cbind(xtal_mlp_model,X2=(X2_best_models %>% filter(grepl(model,pattern='mlp') & imuid==9) %>%  filter(mean==min(mean))  %>% arrange(mean) %>% select(model,timedelay))[1,2:3])
+```
+
+
+The plot shows also the value of $q$ for all the models. In the case of the models based on MLP, only the one with the lower RMSE are considered during the testing stage. In this case the those models are:
+
+`r glad_mlp_model$X2.model` for Gladiator with  $q$ equals to `r  glad_mlp_model$X2.timedelay`
+
+`r xbow_mlp_model$X2.model` for Crossbow with  $q$ equals to `r  xbow_mlp_model$X2.timedelay`
+
+`r xsens_mlp_model$X2.model` for Xsens with  $q$ equals to `r  xsens_mlp_model$X2.timedelay`
+
+`r xtal_mlp_model$X2.model` for Xtal with  $q$ equals to `r  xtal_mlp_model$X2.timedelay`
+
+
+### Results for the X6 (GiroZ) sensor  
+
+The following box plot shows the distribution for the selected models according to the strategy described in the previous section. The plot shows the RSME distributions for sensor X6 provided by  TD-MLR, MA and MLP considering different values for $h$ (i.e typologies)
+
+```{r, fig.height=10, fig.width=10}
+# Select the models with the smallest RMSE
+best_models=group_by(results,model,imu,timedelay) %>% summarise(mean=mean(X6),sd=sd(X6)) %>% filter(mean==min(mean)) %>% arrange(desc(imu))
+# adding the desaggregated lag info
+bw_data=inner_join(best_models,results, by=c("timedelay","imu","model"))
+bwplot(X6~model|imu,groups=timedelay,data=bw_data,scale='free'
+       ,auto.key = F
+       ,panel = panel.superpose
+       ,panel.groups=function(x,y,group.number,...){
+         xt <- x[x==min(x)] # find latest year
+         yt <- y[y==min(y)] # find value at latest year 
+         panel.text(x,yt,labels=levels(factor(bw_data$timedelay))[group.number],pos=1,...)
+         panel.bwplot(x,y,...)
+
+             },ylab="X6"
+      
+         )
+```
+
+
+
+```{r, message=FALSE, warning=FALSE, include=FALSE}
+X6_best_models=group_by(results,model,imuid,timedelay) %>% summarise(mean=mean(X2),sd=sd(X2)) %>% filter(mean==min(mean)) %>% arrange(desc(imuid))
+glad_mlp_model=cbind(glad_mlp_model,X6=(X6_best_models %>% filter(grepl(model,pattern='mlp') & imuid==5) %>%  filter(mean==min(mean))  %>% arrange(mean) %>% select(model,timedelay))[1,2:3] )
+xbow_mlp_model=cbind(xbow_mlp_model,X6=(X6_best_models %>% filter(grepl(model,pattern='mlp') & imuid==6) %>%  filter(mean==min(mean)) %>% arrange(mean) %>% select(model,timedelay))[1,2:3] )
+xsens_mlp_model=cbind(xsens_mlp_model,X6=(X6_best_models %>% filter(grepl(model,pattern='mlp') & imuid==8) %>%  filter(mean==min(mean)) %>% arrange(mean) %>% select(model,timedelay))[1,2:3])
+xtal_mlp_model=cbind(xtal_mlp_model,X6=(X6_best_models %>% filter(grepl(model,pattern='mlp') & imuid==9) %>%  filter(mean==min(mean)) %>% arrange(mean) %>% select(model,timedelay))[1,2:3])
+```
+
+The plot shows also the value of $q$ for all the models. In the case of the models based on MLP, only the one with the lower RMSE are considered during the testing stage. In this case the those models are:
+
+`r glad_mlp_model$X6.model` for Gladiator with  $q$ equals to `r  glad_mlp_model$X6.timedelay`
+
+`r xbow_mlp_model$X6.model` for Crossbow with  $q$ equals to `r  xbow_mlp_model$X6.timedelay`
+
+`r xsens_mlp_model$X6.model` for Xsens with  $q$ equals to `r  xsens_mlp_model$X6.timedelay`
+
+`r xtal_mlp_model$X6.model` for Xtal with  $q$ equals to `r  xtal_mlp_model$X6.timedelay`
+
+
+```{r best_taps, warning=FALSE}
+## reshape results for selecting best models for ma and MLP
+results_reduced=results %>% select(imuid,model,timedelay,X1,X2,X6)
+results_reduced=melt(results_reduced,id.vars=c("imuid","model","timedelay"),variable.name="sensor",value.name="value")
+best_taps=group_by(results_reduced,model,imuid,sensor,timedelay) %>% summarise(mean=mean(value),sd=sd(value)) %>% filter(mean==min(mean)) %>% arrange(desc(imuid)) %>% select(imuid,sensor,timedelay)
+best_taps=reshape2::dcast(best_taps,imuid+model~sensor,value.var = 'timedelay')
+```
+
+### Final Models
+In summary, after a 10-Fold Cross-validation the models with the lower RMSE are:
+
+#### For MLP
+```{r}
+mlp=cbind(imuid=5,glad_mlp_model)
+mlp=rbind(mlp,cbind(imuid=6,xbow_mlp_model))
+mlp=rbind(mlp,cbind(imuid=8,xsens_mlp_model))
+mlp=rbind(mlp,cbind(imuid=9,xtal_mlp_model))
+
+selected_models_mlp_info=cbind(X1=inner_join(mlp,X1_best_models,by=c("imuid","X1.model"="model")) %>% select(imuid,X1.model,timedelay,mean,sd), X2=inner_join(mlp,X2_best_models,by=c("imuid","X2.model"="model")) %>% select(imuid,X2.model,timedelay,mean,sd),X6=inner_join(mlp,X6_best_models,by=c("imuid","X6.model"="model")) %>% select(imuid,X6.model,timedelay,mean,sd))
+
+selected_models_mlp_info[,c(1:5)]
+selected_models_mlp_info[,c(6:10)]
+selected_models_mlp_info[,c(11:15)]
+
+```
+
+#### For TD-MLR
+```{r}
+mlr=best_taps %>% filter(model=='mlr') 
+selected_models_mlr_info=cbind(X1=inner_join(mlr,X1_best_models,by=c("imuid","model")) %>% select(imuid,model,timedelay,mean,sd),X2=inner_join(mlr,X2_best_models,by=c("imuid","model")) %>% select(imuid,model,timedelay,mean,sd),X6=inner_join(mlr,X6_best_models,by=c("imuid","model")) %>% select(imuid,model,timedelay,mean,sd))
+selected_models_mlr_info[,c(1:5)]
+selected_models_mlr_info[,c(6:10)]
+selected_models_mlr_info[,c(11:15)]
+```
+
+#### For MA
+```{r}
+ma=best_taps %>% filter(model=='ma') 
+selected_models_ma_info=cbind(X1=inner_join(ma,X1_best_models,by=c("imuid","model")) %>% select(imuid,model,timedelay,mean,sd),X2=inner_join(ma,X2_best_models,by=c("imuid","model")) %>% select(imuid,model,timedelay,mean,sd),X6=inner_join(ma,X6_best_models,by=c("imuid","model")) %>% select(imuid,model,timedelay,mean,sd))
+selected_models_ma_info[,c(1:5)]
+selected_models_ma_info[,c(6:10)]
+selected_models_ma_info[,c(11:15)]
+```
+
+## Evaluation on T2 Stretch
+
+The 100% of the training dataset (T1) is used for building the models and then evaluated on unseen data.
+For performing the evaluation the model on unseen data, a sampling method is used on the  Stretch T2. In this case, a fixed window encompasing the 10% of the Stretch T2 is randomly and uniformly sampled with replacement. Such process is repeteated 40 times. 
+```{r}
+load("/home/harpo/Dropbox/shared/MEMS-ANN/results/results_samples_mlrnew.Rda")
+```
+```{r, eval=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+
+# Selecting best models for MA
+ma_imus = best_taps %>% filter(model=='ma') 
+
+# Selecting best models por MLP
+mlp5_imus = best_taps %>% filter(model=='mlp5')
+mlp10_imus = best_taps %>% filter(model=='mlp10') 
+mlp20_imus = best_taps %>% filter(model=='mlp20') 
+mlp30_imus = best_taps %>% filter(model=='mlp30') 
+mlp40_imus = best_taps %>% filter(model=='mlp40') 
+mlp60_imus = best_taps %>% filter(model=='mlp60') 
+mlp80_imus = best_taps %>% filter(model=='mlp80') 
+mlp100_imus = best_taps %>% filter(model=='mlp100') 
+
+# Selecting best models for MLR using ANOVA
+selected_imus<-c(8,9,5,6)
+mlr_imus=list()
+mlr_imus[[5]]=select_n_taps(paste(results_dir,"data/","glad_data.txt_glad_H764_target.txt_lm__cv_results.csv",sep=""),"Gladiator",c("X1","X2","X6"))$tap
+mlr_imus[[6]]=select_n_taps(paste(results_dir,"data/","glad_xbow1_target.txt_glad_H764_target.txt_lm__cv_results.csv",sep=""),"Crossbow",c("X1","X2","X6"))$tap
+mlr_imus[[8]]=select_n_taps(paste(results_dir,"data/","glad_xsns1_target.txt_glad_H764_target.txt_lm__cv_results.csv",sep=""),"XSens",c("X1","X2","X6"))$tap
+mlr_imus[[9]]=select_n_taps(paste(results_dir,"data/","glad_xtal_target.txt_glad_H764_target.txt_lm__cv_results.csv",sep=""),"Xtal",c("X1","X2","X6"))$tap
+
+# Setting up MLP parameters
+mlp_arguments<-list(
+      optimizer =  'rmsprop',
+      hidden_node = 5, 
+      num.round=200,
+      array.layout = "rowmajor",
+      out_activation = "rmse",
+      device=mx.gpu(0),array.batch.size=12384,
+      eval.metric = mx.metric.rmse, 
+      activation = "tanh",
+      out_node = 1,
+      verbose=F
+    )
+
+# Performing the actual evaluation on testset
+test_results=c()
+for (imunum in selected_imus){
+  # MLR
+ test_results=rbind(test_results,cbind(model=rep('mlr'),imuid=rep(imunum),exptraintest(imunum = imunum,taps_by_sensors = mlr_imus[[imunum]], model = 'lm', resamp=T,nresamp = 40,windowsize = 6000 )))
+  #MLA  
+  test_results=rbind(test_results,cbind(model=rep('ma'),imuid=rep(imunum),exptraintest(imunum = imunum,taps_by_sensors = ma_imus[which(ma_imus$imuid==imunum),3:5], model = 'ma', resamp=T,nresamp = 40,windowsize = 6000 )))
+  # MLP
+  mlp_arguments$hidden_node=5
+  test_results=rbind(test_results,cbind(model=rep('mlp5'),imuid=rep(imunum),exptraintest(imunum = imunum,taps_by_sensors = mlp5_imus[which(mlp5_imus$imuid==imunum),3:5], model = 'mx.mlp', resamp=T,nresamp = 40,windowsize = 6000, model_arguments = mlp_arguments )))
+  
+  mlp_arguments$hidden_node=10
+  test_results=rbind(test_results,cbind(model=rep('mlp10'),imuid=rep(imunum),exptraintest(imunum = imunum,taps_by_sensors = mlp10_imus[which(mlp10_imus$imuid==imunum),3:5], model = 'mx.mlp', resamp=T,nresamp = 40,windowsize = 6000, model_arguments = mlp_arguments )))
+  
+  mlp_arguments$hidden_node=20
+  test_results=rbind(test_results,cbind(model=rep('mlp20'),imuid=rep(imunum),exptraintest(imunum = imunum,taps_by_sensors = mlp20_imus[which(mlp20_imus$imuid==imunum),3:5], model = 'mx.mlp', resamp=T,nresamp = 40,windowsize = 6000, model_arguments = mlp_arguments )))
+  
+  mlp_arguments$hidden_node=30
+  test_results=rbind(test_results,cbind(model=rep('mlp30'),imuid=rep(imunum),exptraintest(imunum = imunum,taps_by_sensors = mlp30_imus[which(mlp30_imus$imuid==imunum),3:5], model = 'mx.mlp', resamp=T,nresamp = 40,windowsize = 6000, model_arguments = mlp_arguments )))
+  
+  mlp_arguments$hidden_node=40
+  test_results=rbind(test_results,cbind(model=rep('mlp40'),imuid=rep(imunum),exptraintest(imunum = imunum,taps_by_sensors = mlp40_imus[which(mlp40_imus$imuid==imunum),3:5], model = 'mx.mlp', resamp=T,nresamp = 40,windowsize = 6000, model_arguments = mlp_arguments )))
+  
+  mlp_arguments$hidden_node=60
+  test_results=rbind(test_results,cbind(model=rep('mlp60'),imuid=rep(imunum),exptraintest(imunum = imunum,taps_by_sensors = mlp60_imus[which(mlp60_imus$imuid==imunum),3:5], model = 'mx.mlp', resamp=T,nresamp = 40,windowsize = 6000, model_arguments = mlp_arguments )))
+  
+  mlp_arguments$hidden_node=80
+  test_results=rbind(test_results,cbind(model=rep('mlp80'),imuid=rep(imunum),exptraintest(imunum = imunum,taps_by_sensors = mlp80_imus[which(mlp80_imus$imuid==imunum),3:5], model = 'mx.mlp', resamp=T,nresamp = 40,windowsize = 6000, model_arguments = mlp_arguments )))
+  
+  mlp_arguments$hidden_node=100
+  test_results=rbind(test_results,cbind(model=rep('mlp100'),imuid=rep(imunum),exptraintest(imunum = imunum,taps_by_sensors = mlp100_imus[which(mlp100_imus$imuid==imunum),3:5], model = 'mx.mlp', resamp=T,nresamp = 40,windowsize = 6000, model_arguments = mlp_arguments )))
+  
+}
+names(test_results)<-c("model","imuid","sample","timedelay_X1","X1","X1vsRaw","timedelay_X2","X2","X2vsRaw","timedelay_X6","X6","X6vsRaw")
+```
+```{r, eval=FALSE, include=FALSE}
+#alternative approach for selecting MLR best_taps based on the lower RSME value.
+mlr_imus = best_taps %>% filter(model=='mlr') 
+test_results_mlr=c()
+for (imunum in selected_imus){
+   test_results_mlr=rbind(test_results_mlr,cbind(model=rep('mlr'),imuid=rep(imunum),exptraintest(imunum = imunum,taps_by_sensors = mlr_imus[which(mlr_imus$imuid==imunum),3:5], model = 'lm', resamp=T,nresamp = 40,windowsize = 6000 )))
+}
+names(test_results_mlr)<-c("model","imuid","sample","timedelay_X1","X1","X1vsRaw","timedelay_X2","X2","X2vsRaw","timedelay_X6","X6","X6vsRaw")
+test_results_mlr=as.data.frame(test_results_mlr)
+test_results_mlr$model=factor(test_results_mlr$model)
+test_results[which(test_results$model=='mlr'),]=test_results_mlr
+
+#final results is save
+save(test_results,file="/home/harpo/Dropbox/shared/MEMS-ANN/results/results_samples_mlrnew.Rda",compress = "xz")
+```
+
+
+### Comparing MLR vs Raw
+This section analyze the results in terms of RMSE for the TD-MLR compared with the original RMSE.
+
+#### Evaluation on Gladiator
+```{r}
+glad_test_results=test_results %>% filter(imuid==5 &  model=='mlr') %>%select(imuid,X1,X1vsRaw,X2,X2vsRaw,X6,X6vsRaw)
+names(glad_test_results)=c("imuid","X1_mlr","X1_raw","X2_mlr","X2_raw","X6_mlr","X6_raw")
+glad_test_results=tidyr::gather(glad_test_results,"sensor","value",2:7)
+glad_test_results=tidyr::separate(glad_test_results,sensor,c("sensor","source"),sep="_") 
+px1=wilcox.test(value~source,data=glad_test_results %>% filter(sensor=="X1" & (source=="mlr"|source=="raw")))
+px2=wilcox.test(value~source,data=glad_test_results %>% filter(sensor=="X2" & (source=="mlr"|source=="raw")))
+px6=wilcox.test(value~source,data=glad_test_results %>% filter(sensor=="X6" & (source=="mlr"|source=="raw")))
+```
+
+The Figure below show the error distribution for the original Gladiator and the TD-MLR on the three sensors
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+bwplot(value~source|sensor,data=glad_test_results,groups=source,layout=c(3,1),scales=list(relation='free'))
+```
+
+
+A man-Whitney-Wilcox test is conducted for the three sensors and results are presented in the following table
+As can be observed the differences are **statistically significant** for the three sensors
+
+
+**Sensor Name**  |      **X1**     | **X2**          | **X6**
+---------------- |  -------------- | --------------- | ---------------
+  **P Value**    | `r px1$p.value` | `r px2$p.value` | `r px6$p.value`
+
+
+#### Evaluation on Xbow
+```{r}
+xbow_test_results=test_results %>% filter(imuid==6 &  model=='mlr') %>%select(imuid,X1,X1vsRaw,X2,X2vsRaw,X6,X6vsRaw)
+names(xbow_test_results)=c("imuid","X1_mlr","X1_raw","X2_mlr","X2_raw","X6_mlr","X6_raw")
+xbow_test_results=tidyr::gather(xbow_test_results,"sensor","value",2:7)
+xbow_test_results=tidyr::separate(xbow_test_results,sensor,c("sensor","source"),sep="_") 
+px1=wilcox.test(value~source,data=xbow_test_results %>% filter(sensor=="X1" & (source=="mlr"|source=="raw")))
+px2=wilcox.test(value~source,data=xbow_test_results %>% filter(sensor=="X2" & (source=="mlr"|source=="raw")))
+px6=wilcox.test(value~source,data=xbow_test_results %>% filter(sensor=="X6" & (source=="mlr"|source=="raw")))
+```
+
+The Figure below show the error distribution for the original Xbow and the TD-MLR on the three sensors
+
+```{r}
+bwplot(value~source|sensor,data=xbow_test_results,groups=source,layout=c(3,1),scales=list(relation='free'))
+```
+
+A man-Whitney-Wilcox test is conducted for the three sensors and results are presented in the following table
+As can be observed the differences **are statistically significant** for the three sensors
+
+
+**Sensor Name**  |      **X1**     | **X2**          | **X6**
+---------------- |  -------------- | --------------- | ---------------
+  **P Value**    | `r px1$p.value` | `r px2$p.value` | `r px6$p.value`
+
+
+#### Evaluation on Xsens
+```{r}
+xsens_test_results=test_results %>% filter(imuid==8 &  model=='mlr') %>%select(imuid,X1,X1vsRaw,X2,X2vsRaw,X6,X6vsRaw)
+names(xsens_test_results)=c("imuid","X1_mlr","X1_raw","X2_mlr","X2_raw","X6_mlr","X6_raw")
+xsens_test_results=tidyr::gather(xsens_test_results,"sensor","value",2:7)
+xsens_test_results=tidyr::separate(xsens_test_results,sensor,c("sensor","source"),sep="_") 
+px1=wilcox.test(value~source,data=xsens_test_results %>% filter(sensor=="X1" & (source=="mlr"|source=="raw")))
+px2=wilcox.test(value~source,data=xsens_test_results %>% filter(sensor=="X2" & (source=="mlr"|source=="raw")))
+px6=wilcox.test(value~source,data=xsens_test_results %>% filter(sensor=="X6" & (source=="mlr"|source=="raw")))
+```
+
+The Figure below show the error distribution for the original **Xsens** and the TD-MLR on the three sensors
+```{r}
+bwplot(value~source|sensor,data=xsens_test_results,groups=source,layout=c(3,1),scales=list(relation='free'))
+```
+
+A man-Whitney-Wilcox test is conducted for the three sensors and results are presented in the following table
+As can be observed the differences **are statistically significant** for the three sensors
+
+**Sensor Name**  |      **X1**     | **X2**          | **X6**
+---------------- |  -------------- | --------------- | ---------------
+  **P Value**    | `r px1$p.value` | `r px2$p.value` | `r px6$p.value`
+
+#### Evaluation on Xtal
+```{r}
+xtal_test_results=test_results %>% filter(imuid==9 &  model=='mlr') %>%select(imuid,X1,X1vsRaw,X2,X2vsRaw,X6,X6vsRaw)
+names(xtal_test_results)=c("imuid","X1_mlr","X1_raw","X2_mlr","X2_raw","X6_mlr","X6_raw")
+xtal_test_results=tidyr::gather(xtal_test_results,"sensor","value",2:7)
+xtal_test_results=tidyr::separate(xtal_test_results,sensor,c("sensor","source"),sep="_") 
+px1=wilcox.test(value~source,data=xtal_test_results %>% filter(sensor=="X1" & (source=="mlr"|source=="raw")))
+px2=wilcox.test(value~source,data=xtal_test_results %>% filter(sensor=="X2" & (source=="mlr"|source=="raw")))
+px6=wilcox.test(value~source,data=xtal_test_results %>% filter(sensor=="X6" & (source=="mlr"|source=="raw")))
+```
+
+The Figure below show the error distribution for the original **Xtal** and the TD-MLR on the three sensors
+
+```{r}
+bwplot(value~source|sensor,data=xtal_test_results,groups=source,layout=c(3,1),scales=list(relation='free'))
+```
+
+
+A man-Whitney-Wilcox test is conducted for the three sensors and results are presented in the following table
+As can be observed the differences **are statistically significant** for the three sensors
+
+**Sensor Name**  |      **X1**     | **X2**          | **X6**
+---------------- |  -------------- | --------------- | ---------------
+  **P Value**    | `r px1$p.value` | `r px2$p.value` | `r px6$p.value`
+
+### Comparing MLR vs MLP
+The proposed method TD-MLR is now compared with an standard MLP on the four IMUS. Notice that model parameters result from Cross-validation on Stretch T1. For TD-MLR and MLP, the models  with the Lower RSME are selected.
+
+#### Evaluation on Gladiator
+```{r, include=FALSE}
+#glad_test_results=test_results %>% select(model,imuid,sample,X1,X2,X6) %>% filter(imuid==5 & (model=='ma' | model=='mlr' | model=='mlp100'| model=='mlp5'))
+
+glad_test_results=test_results %>% select(model,imuid,sample,X1,X2,X6) %>% filter(imuid==5 & 
+  (   model=='mlr' | 
+      model==as.character(glad_mlp_model$X1.model) | 
+      model==as.character(glad_mlp_model$X2.model) |
+      model==as.character(glad_mlp_model$X6.model) 
+  ))
+
+glad_test_results=melt(glad_test_results,id.vars=c("imuid","model","sample"),variable.name="sensor",value.name="value")
+
+glad_test_results=glad_test_results %>% filter(model=='mlr' | 
+  ( model==as.character(glad_mlp_model$X1.model) & sensor==substr(names(glad_mlp_model)[1], 1,2)  ) | 
+  ( model==as.character(glad_mlp_model$X2.model) & sensor==substr(names(glad_mlp_model)[3], 1,2)) | 
+  ( model==as.character(glad_mlp_model$X6.model) & sensor==substr(names(glad_mlp_model)[5], 1,2))  
+    )
+glad_test_results$model=factor(glad_test_results$model, levels=c(levels(glad_test_results$model), "mlp"))
+# rename mlpxxx to mlp
+glad_test_results[grepl("mlp",glad_test_results$model),]$model='mlp'
+```
+
+The Figure below show the error distribution for the TD-MLR and MLP for the three sensors on **Gladiator**
+
+```{r}
+bwplot(value~model|sensor,data=glad_test_results %>% filter((model=="mlp"|model=="mlr")),groups=factor(model),layout=c(3,1),scales=list(relation='free'))
+```
+
+```{r}
+
+px1=wilcox.test(value~model,data=glad_test_results %>% filter(sensor=="X1" & (model=="mlp"|model=="mlr")))
+px2=wilcox.test(value~model,data=glad_test_results %>% filter(sensor=="X2" & (model=="mlp"|model=="mlr")))
+px6=wilcox.test(value~model,data=glad_test_results %>% filter(sensor=="X6" & (model=="mlp"|model=="mlr")))
+```
+
+A man-Whitney-Wilcox test is conducted for the three sensors and the results are presented in the following table
+As can be observed the differences **are NOT statistically significant** for the three sensors
+
+**Sensor Name**  |      **X1**     | **X2**          | **X6**
+---------------- |  -------------- | --------------- | ---------------
+  **P Value**    | `r px1$p.value` | `r px2$p.value` | `r px6$p.value`
+
+#### Evaluation on Xbow
+```{r}
+xbow_test_results=test_results %>% select(model,imuid,sample,X1,X2,X6) %>% filter(imuid==6 & 
+  (   model=='mlr' | 
+      model==as.character(xbow_mlp_model$X1.model) | 
+      model==as.character(xbow_mlp_model$X2.model) |
+      model==as.character(xbow_mlp_model$X6.model) 
+  ))
+
+xbow_test_results=melt(xbow_test_results,id.vars=c("imuid","model","sample"),variable.name="sensor",value.name="value")
+
+xbow_test_results=xbow_test_results %>% filter(model=='mlr' | 
+  ( model==as.character(xbow_mlp_model$X1.model) & sensor==substr(names(xbow_mlp_model)[1], 1,2)  ) | 
+  ( model==as.character(xbow_mlp_model$X2.model) & sensor==substr(names(xbow_mlp_model)[3], 1,2)) | 
+  ( model==as.character(xbow_mlp_model$X6.model) & sensor==substr(names(xbow_mlp_model)[5], 1,2))  
+    )
+xbow_test_results$model=factor(xbow_test_results$model, levels=c(levels(xbow_test_results$model), "mlp"))
+# rename mlpxxx to mlp
+xbow_test_results[grepl("mlp",xbow_test_results$model),]$model='mlp'
+
+
+```
+
+The Figure below show the error distribution for the TD-MLR and MLP for the three sensors on **Xbow**
+```{r}
+bwplot(value~model|sensor,data=xbow_test_results %>% filter( model=="mlp"|model=="mlr") ,groups=factor(model),layout=c(3,1),scales=list(relation='free'))
+```
+
+```{r}
+px1=wilcox.test(value~model,data=xbow_test_results %>% filter(sensor=="X1" & (model=="mlp"|model=="mlr")))
+px2=wilcox.test(value~model,data=xbow_test_results %>% filter(sensor=="X2" & (model=="mlp"|model=="mlr")))
+px6=wilcox.test(value~model,data=xbow_test_results %>% filter(sensor=="X6" & (model=="mlp"|model=="mlr")))
+```
+A man-Whitney-Wilcox test is conducted for the three sensors and the results are presented in the following table
+As can be observed the differences **are NOT statistically significant** for the X1 and X2 sensors. However
+in this case the difference for the X6 sensor are significant with a p.value <0.05
+
+**Sensor Name**  |      **X1**     | **X2**          | **X6**
+---------------- |  -------------- | --------------- | ---------------
+  **P Value**    | `r px1$p.value` | `r px2$p.value` | `r px6$p.value`
+
+#### Evaluation on XSENS
+```{r}
+xsens_test_results=test_results %>% select(model,imuid,sample,X1,X2,X6) %>% filter(imuid==5 & 
+  (   model=='mlr' | 
+      model==as.character(xsens_mlp_model$X1.model) | 
+      model==as.character(xsens_mlp_model$X2.model) |
+      model==as.character(xsens_mlp_model$X6.model) 
+  ))
+
+xsens_test_results=melt(xsens_test_results,id.vars=c("imuid","model","sample"),variable.name="sensor",value.name="value")
+
+xsens_test_results=xsens_test_results %>% filter(model=='mlr' | 
+  ( model==as.character(xsens_mlp_model$X1.model) & sensor==substr(names(xsens_mlp_model)[1], 1,2)  ) | 
+  ( model==as.character(xsens_mlp_model$X2.model) & sensor==substr(names(xsens_mlp_model)[3], 1,2)) | 
+  ( model==as.character(xsens_mlp_model$X6.model) & sensor==substr(names(xsens_mlp_model)[5], 1,2))  
+    )
+xsens_test_results$model=factor(xsens_test_results$model, levels=c(levels(xsens_test_results$model), "mlp"))
+# rename mlpxxx to mlp
+xsens_test_results[grepl("mlp",xsens_test_results$model),]$model='mlp'
+```
+
+The Figure below show the error distribution for the TD-MLR and MLP for the three sensors on **Xsens**
+```{r}
+bwplot(value~model|sensor,data=xsens_test_results %>% filter( model=="mlp"|model=="mlr") ,groups=factor(model),layout=c(3,1),scales=list(relation='free'))
+```
+
+```{r}
+px1=wilcox.test(value~model,data=xsens_test_results %>% filter(sensor=="X1" & (model=="mlp"|model=="mlr")))
+px2=wilcox.test(value~model,data=xsens_test_results %>% filter(sensor=="X2" & (model=="mlp"|model=="mlr")))
+px6=wilcox.test(value~model,data=xsens_test_results %>% filter(sensor=="X6" & (model=="mlp"|model=="mlr")))
+```
+
+A man-Whitney-Wilcox test is conducted for the three sensors and results are presented in the following table
+As can be observed the differences **are NOT statistically significant** for the three sensors
+
+**Sensor Name**  |      **X1**     | **X2**          | **X6**
+---------------- |  -------------- | --------------- | ---------------
+  **P Value**    | `r px1$p.value` | `r px2$p.value` | `r px6$p.value`
+
+#### Evaluation on Xtal
+```{r}
+xtal_test_results=test_results %>% select(model,imuid,sample,X1,X2,X6) %>% filter(imuid==5 & 
+  (   model=='mlr' | 
+      model==as.character(xtal_mlp_model$X1.model) | 
+      model==as.character(xtal_mlp_model$X2.model) |
+      model==as.character(xtal_mlp_model$X6.model) 
+  ))
+
+xtal_test_results=melt(xtal_test_results,id.vars=c("imuid","model","sample"),variable.name="sensor",value.name="value")
+
+xtal_test_results=xtal_test_results %>% filter(model=='mlr' | 
+  ( model==as.character(xtal_mlp_model$X1.model) & sensor==substr(names(xtal_mlp_model)[1], 1,2)  ) | 
+  ( model==as.character(xtal_mlp_model$X2.model) & sensor==substr(names(xtal_mlp_model)[3], 1,2)) | 
+  ( model==as.character(xtal_mlp_model$X6.model) & sensor==substr(names(xtal_mlp_model)[5], 1,2))  
+    )
+xtal_test_results$model=factor(xtal_test_results$model, levels=c(levels(xtal_test_results$model), "mlp"))
+# rename mlpxxx to mlp
+xtal_test_results[grepl("mlp",xtal_test_results$model),]$model='mlp'
+```
+
+The Figure below show the error distribution for the TD-MLR and MLP for the three sensors on **Xtal**
+```{r}
+bwplot(value~model|sensor,data=xtal_test_results %>% filter( model=="mlp"|model=="mlr") ,groups=factor(model),layout=c(3,1),scales=list(relation='free'))
+```
+
+```{r}
+px1=wilcox.test(value~model,data=xtal_test_results %>% filter(sensor=="X1" & (model=="mlp"|model=="mlr")))
+px2=wilcox.test(value~model,data=xtal_test_results %>% filter(sensor=="X2" & (model=="mlp"|model=="mlr")))
+px3=wilcox.test(value~model,data=xtal_test_results %>% filter(sensor=="X6" & (model=="mlp"|model=="mlr")))
+```
+A man-Whitney-Wilcox test is conducted for the three sensors and results are presented in the following table
+As can be observed the differences **are NOT statistically significant** for the three sensors
+
+**Sensor Name**  |      **X1**     | **X2**          | **X6**
+---------------- |  -------------- | --------------- | ---------------
+  **P Value**    | `r px1$p.value` | `r px2$p.value` | `r px6$p.value`
+
+#### Discussion
+
+After evaluating MLR and MLP, it is possible to conclude that both model performances are comparable in terms of RMSE for the four IMUs evaluated.
+MLR has shown an equivalent performance in most of the the cases yet outperforming in the case of sensor X6 (GyroZ) for the Crossbow(xbow). 
+
+### Comparing MLR vs MA
+
+In this section the proposed MLR model is compared with the standar MA method for filtering noise.
+
+#### Evaluation on Gladiator
+```{r}
+glad_test_results=test_results %>% select(model,imuid,sample,X1,X2,X6) %>% filter(imuid==5 & (model=='ma' | model=='mlr'))
+glad_test_results=melt(glad_test_results,id.vars=c("imuid","model","sample"),variable.name="sensor",value.name="value")
+
+```
+The Figure below show the error distribution for the TD-MLR and MA for the three sensors on **Gladiator**
+```{r}
+bwplot(value~model|sensor,data=glad_test_results %>% filter((model=="ma"|model=="mlr")),groups=factor(model),layout=c(3,1),scales=list(relation='free'))
+px1=wilcox.test(value~model,data=glad_test_results %>% filter(sensor=="X1" & (model=="ma"|model=="mlr")))
+px2=wilcox.test(value~model,data=glad_test_results %>% filter(sensor=="X2" & (model=="ma"|model=="mlr")))
+px6=wilcox.test(value~model,data=glad_test_results %>% filter(sensor=="X6" & (model=="ma"|model=="mlr")))
+```
+
+A man-Whitney-Wilcox test is conducted for the three sensors and results are presented in the following table
+As can be observed the differences **are NOT statistically significant** for the two out of the three sensors
+
+**Sensor Name**  |      **X1**     | **X2**          | **X6**
+---------------- |  -------------- | --------------- | ---------------
+  **P Value**    | `r px1$p.value` | `r px2$p.value` | `r px6$p.value`
+
+#### Evaluation on Xbow
+```{r}
+xbow_test_results=test_results %>% select(model,imuid,sample,X1,X2,X6) %>% filter(imuid==6 & (model=='ma' | model=='mlr' | model=='mlp80'| model=='mlp5'))
+xbow_test_results=melt(xbow_test_results,id.vars=c("imuid","model","sample"),variable.name="sensor",value.name="value")
+xbow_test_results=xbow_test_results %>% filter(model=='mlr' | model=='ma' | ( model=='mlp80' & (sensor=='X1' | sensor=='X6')) | ( model=='mlp5' & sensor=='X2'))
+```
+
+The Figure below show the error distribution for the TD-MLR and MA for the three sensors on **Xbow**
+
+```{r}
+bwplot(value~model|sensor,data=xbow_test_results %>% filter( model=="ma"|model=="mlr") ,groups=factor(model),layout=c(3,1),scales=list(relation='free'))
+px1=wilcox.test(value~model,data=xbow_test_results %>% filter(sensor=="X1" & (model=="ma"|model=="mlr")))
+px2=wilcox.test(value~model,data=xbow_test_results %>% filter(sensor=="X2" & (model=="ma"|model=="mlr")))
+px6=wilcox.test(value~model,data=xbow_test_results %>% filter(sensor=="X6" & (model=="ma"|model=="mlr")))
+```
+
+A man-Whitney-Wilcox test is conducted for the three sensors and results are presented in the following table
+As can be observed the differences **are statistically significant** for the three sensors
+
+**Sensor Name**  |      **X1**     | **X2**          | **X6**
+---------------- |  -------------- | --------------- | ---------------
+  **P Value**    | `r px1$p.value` | `r px2$p.value` | `r px6$p.value`
+
+#### Evaluation on XSENS
+```{r}
+xsens_test_results=test_results %>% select(model,imuid,sample,X1,X2,X6) %>% filter(imuid==8 & (model=='ma' | model=='mlr' | model=='mlp80'| model=='mlp100'))
+xsens_test_results=melt(xsens_test_results,id.vars=c("imuid","model","sample"),variable.name="sensor",value.name="value")
+xsens_test_results=xsens_test_results %>% filter(model=='mlr' | model=='ma' | ( model=='mlp100' & (sensor=='X2' | sensor=='X6')) | ( model=='mlp80' & sensor=='X1'))
+```
+
+The Figure below show the error distribution for the TD-MLR and MA for the three sensors on **Xsens**
+
+```{r}
+bwplot(value~model|sensor,data=xsens_test_results %>% filter( model=="ma"|model=="mlr") ,groups=factor(model),layout=c(3,1),scales=list(relation='free'))
+px1=wilcox.test(value~model,data=xsens_test_results %>% filter(sensor=="X1" & (model=="ma"|model=="mlr")))
+px2=wilcox.test(value~model,data=xsens_test_results %>% filter(sensor=="X2" & (model=="ma"|model=="mlr")))
+px6=wilcox.test(value~model,data=xsens_test_results %>% filter(sensor=="X6" & (model=="ma"|model=="mlr")))
+```
+
+A man-Whitney-Wilcox test is conducted for the three sensors and results are presented in the following table
+As can be observed the differences **are statistically significant** for the three sensors
+
+**Sensor Name**  |      **X1**     | **X2**          | **X6**
+---------------- |  -------------- | --------------- | ---------------
+  **P Value**    | `r px1$p.value` | `r px2$p.value` | `r px6$p.value`
+
+#### Evaluation on Xtal
+```{r}
+xtal_test_results=test_results %>% select(model,imuid,sample,X1,X2,X6) %>% filter(imuid==9 & (model=='ma' | model=='mlr' | model=='mlp80'| model=='mlp100'| model=='mlp5'))
+xtal_test_results=melt(xtal_test_results,id.vars=c("imuid","model","sample"),variable.name="sensor",value.name="value")
+xtal_test_results=xtal_test_results %>% filter(model=='mlr' | model=='ma' | ( model=='mlp80' & sensor=='X1') | ( model=='mlp100' & sensor=='X2')| ( model=='mlp100' & sensor=='X6'))
+
+```
+
+The Figure below show the error distribution for the TD-MLR and MA for the three sensors on **Xtal**
+```{r}
+bwplot(value~model|sensor,data=xtal_test_results %>% filter( model=="ma"|model=="mlr") ,groups=factor(model),layout=c(3,1),scales=list(relation='free'))
+px1=wilcox.test(value~model,data=xtal_test_results %>% filter(sensor=="X1" & (model=="ma"|model=="mlr")))
+px2=wilcox.test(value~model,data=xtal_test_results %>% filter(sensor=="X2" & (model=="ma"|model=="mlr")))
+px6=wilcox.test(value~model,data=xtal_test_results %>% filter(sensor=="X6" & (model=="ma"|model=="mlr")))
+```
+
+A man-Whitney-Wilcox test is conducted for the three sensors and results are presented in the following table
+As can be observed the differences **are statistically significant** for the three sensors
+
+**Sensor Name**  |      **X1**     | **X2**          | **X6**
+---------------- |  -------------- | --------------- | ---------------
+  **P Value**    | `r px1$p.value` | `r px2$p.value` | `r px6$p.value`
+
+#### Discussion
+
+In general the TD-MLR outperforms in three out of four IMUS. Namely, Xbow, Xsens and Xtal, while in the case of Gladiator, the performance of TD-MLR has not show a statistically significant difference.
+Clearly, given the simplicity of the MA method, it is fair to say that for the Gladiator IMU the application of a TD-MLR model is not justified. However, the MLR has shown a significant difference in the remaining IMUs.
+
+# Concluding Remarks
+
+* Despite the claims of non-linearity on MEMS sensors, it has been verified that a simple linear method such as TD-MLR can reduce significantly the error on the four evaluated IMUs. The simplicity behind TD-MLR facilitates its deployment on an embedded system which combines the learned filter and the MEMS sensors. The resulting system could provide a significant improvement on the development of UAV using low-cost techonology.
+* Non-linear MLP shows a similar performance compared with MLR, with the inconvenience of incrementing the complexity of the model. A situation that should be considered for further deployment on embedded systems.
+* On MEMS sensors with a high noise level, a traditional and simple method such as MA shows a performance comparable to MLR. It seems that a higher noise level turns things harder for learning nav-grade IMU behavior using TD-MLR. Maybe if more data had been available the algorithm would eventually outperforms MA. 
