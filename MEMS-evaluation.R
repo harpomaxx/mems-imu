@@ -84,7 +84,7 @@ denormalize <-function(normalize,x){
 }
 
 #### Train and test 
-exptraintest <- function(imunum,taps_by_sensors=list(),model='lm', model_arguments=c(),normaldata=F,shuffledata=F,resamp=F,nresamp=2, windowsize=1000){
+exptraintest <- function(imunum,taps_by_sensors=list(),model='lm', model_arguments=c(),normaldata=F,shuffledata=F,resamp=F,nresamp=2, windowsize=1000, calcmean=F){
   
   results=c()
   sensors=c()
@@ -106,7 +106,10 @@ exptraintest <- function(imunum,taps_by_sensors=list(),model='lm', model_argumen
         testset=testset_total[(windowsstart:(windowsstart+windowsize)),]
         prediction_lm <- get_model_predictions(model,model_arguments,testset,timedelay,lmmodel) 
         brsme=rsme(testset$target,testset[,timedelay])
-        tt=c(rsme(testset$target,prediction_lm),brsme)
+        tt<-c(rsme(testset$target,prediction_lm),brsme)
+        if (calcmean==T){
+          tt<-c(tt,mean(testset$target),mean(prediction_lm),mean(testset[,timedelay]))
+        }
         resamp_results=rbind(resamp_results,tt)
         print(paste("  ++sample",samp, "starting at",windowsstart, "lenght",nrow(testset)))
       }
@@ -117,6 +120,9 @@ exptraintest <- function(imunum,taps_by_sensors=list(),model='lm', model_argumen
       prediction_lm <- build_model(model,model_arguments,trainset,testset,timedelay) 
       brsme=rsme(testset$target,testset[,timedelay])
       tt=c(rsme(testset$target,prediction_lm),brsme)
+      if (calcmean==T){
+        tt<-c(tt,mean(prediction_lm),mean(testset$target),mean(testset[,timedelay]))
+      }
       sensors<-cbind(sensors,rep(timedelay,1))
       sensors<-cbind(sensors,t(tt))
     }
@@ -125,13 +131,23 @@ exptraintest <- function(imunum,taps_by_sensors=list(),model='lm', model_argumen
   sensors=cbind(seq(1,nrow(sensors)),sensors)
   results=as.data.frame(sensors)
   names(results)[1]=c("sample")
-  rownames(results)=NULL
-  colnames(results)[2:(1+(length(selected_sensors)*3))]<-rbind(paste("timedelay",selected_sensors,sep="_"),
+  #rownames(results)=NULL
+  if(calcmean==T){
+    colnames(results)[2:(1+(length(selected_sensors)*6))]<-rbind(paste("timedelay",selected_sensors,sep="_"),
                                                                paste("X",selected_sensors,sep=""),
-                                                               paste("t_rsme",selected_sensors,sep="_"))
-
+                                                               paste("t_rsme",selected_sensors,sep="_"),
+                                                               rep("prediction_mean",3),rep("target_mean",3),rep("original_mean",3))
+  }else{
+    colnames(results)[2:(1+(length(selected_sensors)*3))]<-rbind(paste("timedelay",selected_sensors,sep="_"),
+                                                                 paste("X",selected_sensors,sep=""),
+                                                                 paste("t_rsme",selected_sensors,sep="_"))
+  }
+  
   arguments_str<- paste(names(model_arguments)[1:5],as.vector(unlist(model_arguments))[1:5],sep="_",collapse="_")
-  write.csv(results, file = paste(paste(results_dir,basename(imu_data[imunum])),model,arguments_str,"test_results.csv",sep='_') ,quote=F, row.names = T)
+  write.csv(results, file = paste(paste(results_dir,basename(imu_data[imunum])),
+                                  basename(imu_target[imunum]),
+                                  model,arguments_str,
+                                  "test_results.csv",sep='_') ,quote=F, row.names = T)
   return(results)
 }
 #### Create a model on a trainset and return prediction from a testset
