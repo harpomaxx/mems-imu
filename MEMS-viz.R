@@ -123,23 +123,39 @@ plotweights <-function(lm_model,imu_name,sensor){
 # BUG: Does not work as a function
 boxplot_time_series<-function()
 {
-  glad=as.data.frame(fread(imu_data[1],sep=" ",header=F))
-  xbow=as.data.frame(fread(imu_data[4],sep=" ",header=F))
+  glad=as.data.frame(fread(imu_data[5],sep=" ",header=F))
+  xbow=as.data.frame(fread(imu_data[6],sep=" ",header=F))
+  xtal=as.data.frame(fread(imu_data[8],sep=" ",header=F))
+  xsens=as.data.frame(fread(imu_data[9],sep=" ",header=F))
   h764=as.data.frame(fread(imu_target[6],sep=" ",header=F))
-  glad_sensors=cbind(glad[,c(1,2,6)],rep("Gladiator"),deparse.level=0)
+
+  glad_sensors=cbind(glad[,c(2,3,7)],rep("Gladiator"),deparse.level=0)
   names(glad_sensors)=c("AccX","AccY","GyroZ","IMU")
-  xbow_sensors=cbind(xbow[,c(1,2,6)],rep("Crossbow"))
+  
+  xbow_sensors=cbind(xbow[,c(2,3,7)],rep("Crossbow"))
   names(xbow_sensors)=c("AccX","AccY","GyroZ","IMU")
-  h764_sensors=cbind(h764[,c(1,2,6)],rep("Honeywell"))
+  
+  xtal_sensors=cbind(xtal[,c(2,3,7)],rep("Crista"))
+  names(xtal_sensors)=c("AccX","AccY","GyroZ","IMU")
+  
+  xsens_sensors=cbind(xsens[,c(2,3,7)],rep("XSens"))
+  names(xsens_sensors)=c("AccX","AccY","GyroZ","IMU")
+  
+  h764_sensors=cbind(h764[,c(2,3,7)],rep("Honeywell"))
   names(h764_sensors)=c("AccX","AccY","GyroZ","IMU")
   
   dynamic1=rbind(glad_sensors[1:(nrow(glad_sensors)/2),],
                  xbow_sensors[1:(nrow(xbow_sensors)/2),],
-                 h764_sensors[1:(nrow(h764_sensors)/2),])
+                 xtal_sensors[1:(nrow(xtal_sensors)/2),],
+                 xsens_sensors[1:(nrow(xsens_sensors)/2),])
+                # h764_sensors[1:(nrow(h764_sensors)/2),])
   
   dynamic2=rbind(glad_sensors[(nrow(glad_sensors)/2):nrow(glad_sensors),],
                  xbow_sensors[(nrow(xbow_sensors)/2):nrow(xbow_sensors),],
-                 h764_sensors[(nrow(h764_sensors)/2):nrow(h764_sensors),])
+                 xtal_sensors[(nrow(xtal_sensors)/2):nrow(xtal_sensors),],
+                 xsens_sensors[(nrow(xsens_sensors)/2):nrow(xsens_sensors),])
+             #    h764_sensors[(nrow(h764_sensors)/2):nrow(h764_sensors),])
+
   pdf(paste(results_dir,"figs/boxplot_ts_1_.pdf",sep=""),width=10,height=4.5)
   featurePlot(x = dynamic1[, 1:3], 
               y = dynamic1$IMU, 
@@ -150,7 +166,7 @@ boxplot_time_series<-function()
               ylim=list(c(-4, 4), c(-5, 5),c(-0.6,0.5)),
               layout = c(3,1 ), 
               auto.key = list(columns = 2),
-              do.out = F,main="Trayectory 1 (T1)")
+              do.out = F,main="Stretch 1 (S1)")
   dev.off()
   pdf(paste(results_dir,"figs/boxplot_ts_2_.pdf",sep=""),width=10,height=4.5)
   
@@ -163,7 +179,7 @@ boxplot_time_series<-function()
               ylim=list(c(-4, 4), c(-5, 5),c(-0.6,0.5)),
               layout = c(3,1 ), 
               auto.key = list(columns = 2),
-              do.out = F,main="Trayectory 2 (T2)")
+              do.out = F,main="Stretch 2 (S2)")
   dev.off()
   
   
@@ -191,7 +207,11 @@ trajectory_plot <-function(){
   trajectory2=read.csv("/home/harpo/Dropbox/shared/MEMS-ANN/datasets/dgps_T2.txt",header=F)
   pdf(paste(results_dir,"figs/trajectories.pdf",sep=""),width=10,height=5)
   par(mfrow=c(1,2))
-  plot(trajectory1$V1,trajectory1$V2,type="l",lwd=4,ylab="Latitude [degree]",xlab="Longitude [degree]",main="Stretch 1 (T1)",col="orange",cex=1.2)
-  plot(trajectory2$V1,trajectory2$V2,type="l",lwd=4,ylab="Latitude [degree]",xlab="Longitude [degree]",main="Stretch 2 (T2)",col="orange",cex=1.2)
+  plot(trajectory1$V1,trajectory1$V2,type="l",lwd=2,ylab="Latitude [degree]",xlab="Longitude [degree]",main="Stretch 1 (S1)",col="lightblue",cex=2.8)
+  points(trajectory1$V1[1],trajectory1$V2[1],col='darkgray',pch=16,cex=1.8)
+  points(trajectory1$V1[6600],trajectory1$V2[6600],col='darkgray',pch=15,cex=1.5)
+  plot(trajectory2$V1,trajectory2$V2,type="l",lwd=2,ylab="Latitude [degree]",xlab="Longitude [degree]",main="Stretch 2 (S2)",col="lightblue",cex=2.8)
+  points(trajectory2$V1[1],trajectory2$V2[1],col='darkgray',pch=16,cex=1.8)
+  points(trajectory2$V1[1498],trajectory2$V2[1498],col='darkgray',pch=15,cex=1.5)
 dev.off()
 }
