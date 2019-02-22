@@ -61,8 +61,8 @@ imu_datainterval[[20]]=list(start=191787,end=1917876)
 
 
 selected_imus<-c(8,9,5,6)
-selected_sensors<-c(1,2,6)
-selected_taps<-c(1,seq(5,100,5))
+selected_sensors<-c(1,2,3,4,5,6)
+selected_taps<-c(1,seq(2,100,2))
 
 
 #selected_taps=c(1,50,100)

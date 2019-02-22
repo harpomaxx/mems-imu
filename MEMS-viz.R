@@ -162,7 +162,7 @@ boxplot_time_series<-function()
               plot = "box", 
               ## Pass in options to bwplot() 
               scales = list(y = list(relation="free",cex=1.2),
-                            x = list(rot = 90,cex=1.2)),
+                            x = list(rot = 45,cex=1.2)),
               ylim=list(c(-4, 4), c(-5, 5),c(-0.6,0.5)),
               layout = c(3,1 ), 
               auto.key = list(columns = 2),
@@ -175,7 +175,7 @@ boxplot_time_series<-function()
               plot = "box", 
               ## Pass in options to bwplot() 
               scales = list(y = list(relation="free",cex=1.2),
-                            x = list(rot = 90,cex=1.2)),  
+                            x = list(rot = 45,cex=1.2)),  
               ylim=list(c(-4, 4), c(-5, 5),c(-0.6,0.5)),
               layout = c(3,1 ), 
               auto.key = list(columns = 2),

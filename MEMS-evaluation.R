@@ -10,7 +10,7 @@ library("cvTools")
 library("data.table")
 library("zoo") #for rollmeans
 library("biglm")
-library(mxnet)
+#library(mxnet)
 
 #### Function log
 Log <- function(text, ...) {

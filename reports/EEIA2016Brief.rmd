@@ -413,6 +413,7 @@ The 100% of the training dataset (T1) is used for building the models and then e
 For performing the evaluation the model on unseen data, a sampling method is used on the  Stretch T2. In this case, a fixed window encompasing the 10% of the Stretch T2 is randomly and uniformly sampled with replacement. Such process is repeteated 40 times. 
 ```{r}
 load("/home/harpo/Dropbox/shared/MEMS-ANN/results/results_samples_mlr_own_method.Rda")
+test_results
 ```
 
 ```{r}
@@ -698,6 +699,8 @@ glad_test_results$model=factor(glad_test_results$model, levels=c(levels(glad_tes
 glad_test_results$sensor=factor(glad_test_results$sensor, levels=c(levels(glad_test_results$sensor), "AccX","AccY","GyroZ"))
 # rename mlpxxx to mlp
 glad_test_results[grepl("mlp",glad_test_results$model),]$model='mlp'
+
+mlp_models[[5]][2]
 ```
 
 The Figure below show the error distribution for the TD-MLR and MLP for the three sensors on **Gladiator**
@@ -1073,7 +1076,8 @@ ggplot(rmse_table %>% unique())+
   theme_minimal()+
   theme(axis.text.x = element_text(angle = 45, hjust = 1))+
   scale_x_discrete(limits=c('td-mlr','mlp','ma','non-comp.'))+
-  facet_wrap(~sensor+imuid, scales = "free_y",strip.position = "bottom")
+  facet_wrap(sensor~imuid,scales='free_y')
+  #facet_wrap(~sensor+imuid, scales = "free_y",strip.position = "top")
 ```
 
 A man-Whitney-Wilcox test is conducted for the three sensors and results are presented in the following table
